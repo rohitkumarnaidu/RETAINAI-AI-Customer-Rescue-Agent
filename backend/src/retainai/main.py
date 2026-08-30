@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="RETAINAI - The Autonomous Customer Rescue Agent API (SENSE→THINK→ACT→MEASURE→LEARN) — pagination via ?limit/offset, filtering via ?risk_level/segment/search, sorting via ?sort_by/sort_order",
+    description="RETAINAI - The Autonomous Customer Rescue Agent API (SENSE→THINK→ACT→MEASURE→LEARN) — LLM: gemini/groq (Groq LPU) via `LLM_PROVIDER` + `LLM_API_KEY`/`GROQ_API_KEY`; pagination via ?limit/offset, filtering via ?risk_level/segment/search, sorting via ?sort_by/sort_order",
     version="0.1.0",
     lifespan=lifespan,
 )

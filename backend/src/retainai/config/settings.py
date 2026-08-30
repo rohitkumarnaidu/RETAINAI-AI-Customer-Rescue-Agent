@@ -28,9 +28,10 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./retainai.db"
 
-    LLM_PROVIDER: str = "gemini"
-    LLM_MODEL: str = "gemini-2.5-flash"
+    LLM_PROVIDER: str = "gemini"  # gemini | groq | openai | anthropic | mock
+    LLM_MODEL: str = "gemini-2.5-flash"  # gemini-2.5-flash | llama-3.3-70b-versatile (groq) | gpt-4o
     LLM_API_KEY: str = "mock_key_for_dev"
+    GROQ_API_KEY: str = ""  # alias for LLM_API_KEY when provider=groq (gsk_...)
 
     API_V1_PREFIX: str = "/api/v1"
     CORS_ORIGINS: list[str] = Field(default=["http://localhost:5173", "http://127.0.0.1:5173"])
