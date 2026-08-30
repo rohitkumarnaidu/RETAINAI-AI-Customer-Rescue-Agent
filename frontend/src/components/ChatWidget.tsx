@@ -333,7 +333,7 @@ export const ChatWidget: React.FC<{ customerId?:string; customerName?:string }> 
                 style={{minHeight: '42px'}}
               />
               <button
-                onClick={send}
+                onClick={()=> send()}
                 disabled={loading || !input.trim()}
                 className="w-10 h-10 rounded-xl bg-[#0F172A] text-white flex items-center justify-center hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
               >
