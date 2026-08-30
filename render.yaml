@@ -1,0 +1,58 @@
+# Render Blueprint — RETAINAI hybrid backend (deploy/hybrid-live-dynamic)
+# Docs: https://render.com/docs/blueprint-spec
+# Deploys backend/ as Docker web service on branch deploy/hybrid-live-dynamic
+# Frontend lives on Vercel (see ../vercel.json); CORS_ORIGINS below allows Vercel origin.
+
+services:
+  - type: web
+    name: retainai-api-live
+    runtime: docker
+    env: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    branch: deploy/hybrid-live-dynamic
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: LLM_PROVIDER
+        value: groq
+      - key: LLM_MODEL
+        value: openai/gpt-oss-120b
+      # Secrets — set in Render dashboard (Environment > Secret Files / Env Vars). sync:false = do not store in repo.
+      - key: LLM_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      # Database — SQLite default (zero-config, persisted on disk). For Postgres, comment this line and use Render Postgres below.
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./retainai.db
+        # Postgres alternative (uncomment when using managed DB):
+        # value: postgresql+asyncpg://retainai:retainai@<host>:5432/retainaidb
+        # Or use fromDatabase (see databases section below):
+        # fromDatabase:
+        #   name: retainai-db
+        #   property: connectionString
+      - key: CORS_ORIGINS
+        value: https://retainai.vercel.app,http://localhost:5173
+      - key: DEMO_MODE
+        value: true
+      - key: AUTH_ENABLED
+        value: false
+      # Optional prod-hardening overrides (set in dashboard when ready):
+      # - key: JWT_SECRET
+      #   sync: false
+      # - key: APP_SECRET_KEY
+      #   sync: false
+      # - key: APP_ENV
+      #   value: production
+
+# Optional managed Postgres — uncomment to provision alongside the web service.
+# When enabled, update DATABASE_URL above to fromDatabase instead of sqlite value.
+# databases:
+#   - name: retainai-db
+#     plan: starter
+#     databaseName: retainaidb
+#     user: retainai
