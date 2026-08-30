@@ -26,16 +26,21 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
     return out;
   },[customers,q,seg,risk,sort]);
 
+  const [page,setPage]=useState(1); const pageSize=20;
+  const fmtDate=(s:string)=>{ try{ const d=new Date(s); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch{return s}};
+  const fmtARR=(n:number)=> n>=1000? `$${(n/1000).toFixed(0)}k` : `$${n.toLocaleString()}`;
   if(loading) return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[1,2,3,4].map(i=><SkeletonCard key={i}/>)}</div>;
   if(error) return <ErrorState message={error} onRetry={load} />;
 
+  const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
+  const paged=filtered.slice(0, page*pageSize);
   return (
     <div className="space-y-4">
       <Card>
         <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Customers</h2>
-            <p className="text-xs text-slate-500">{filtered.length} of {customers.length} · Search, filter, sort — real backend data</p>
+            <p className="text-xs text-slate-500">{filtered.length} of {customers.length} · Search, filter, sort — real backend data · Updated {new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
             <div className="relative flex-1 lg:w-64">
@@ -63,14 +68,14 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
               <tr><th className="text-left p-3">Account</th><th className="text-left p-3">Segment</th><th className="text-left p-3">Health</th><th className="text-left p-3">Risk</th><th className="text-left p-3">ARR</th><th className="text-left p-3">Renewal</th><th className="p-3"></th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map((c:any)=>(
+              {paged.map((c:any)=>(
                 <tr key={c.id} onClick={()=>onSelectCustomer(c.id)} className="hover:bg-slate-50 cursor-pointer">
                   <td className="p-3"><div className="font-medium">{c.name}</div><div className="text-xs text-slate-500 font-mono">{c.domain} · {c.industry}</div></td>
                   <td className="p-3 text-xs">{c.segment}<div className="text-[11px] text-slate-400">{c.plan}</div></td>
                   <td className="p-3"><div className="flex items-center gap-2"><HealthRing score={c.health_score} size={36}/><span className="text-sm font-semibold">{Math.round(c.health_score)}</span></div></td>
                   <td className="p-3"><RiskBadge level={c.risk_level} size="sm"/></td>
-                  <td className="p-3 font-mono text-xs">${c.arr.toLocaleString()}</td>
-                  <td className="p-3 text-xs">{c.renewal_date}<div className="text-[11px] text-slate-400">{c.lifecycle_stage}</div></td>
+                  <td className="p-3 font-mono text-xs">{fmtARR(c.arr)}</td>
+                  <td className="p-3 text-xs">{fmtDate(c.renewal_date)}<div className="text-[11px] text-slate-400">{c.lifecycle_stage}</div></td>
                   <td className="p-3 text-right"><span className="inline-flex items-center gap-1 border border-slate-200 rounded-lg px-2.5 py-1 text-xs bg-white">Open <ArrowUpRight className="w-3 h-3"/></span></td>
                 </tr>
               ))}
@@ -78,7 +83,7 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
             </tbody>
           </table>
         </div>
-        <div className="p-3 border-t border-slate-200 text-xs text-slate-500 flex items-center gap-2"><SlidersHorizontal className="w-3.5 h-3.5"/> {filtered.length} shown · Sorted by {sort}</div>
+        <div className="p-3 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between"><span className="flex items-center gap-2"><SlidersHorizontal className="w-3.5 h-3.5"/> {paged.length} of {filtered.length} shown · Sorted by {sort} · Page {page}/{totalPages}</span>{paged.length < filtered.length && <button onClick={()=> setPage(p=> p+1)} className="border border-slate-200 bg-white px-3 py-1 rounded-lg hover:bg-slate-50">Load more</button>}</div>
       </div>
     </div>
   );
