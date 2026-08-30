@@ -82,17 +82,18 @@ class LLMClient:
                         logger.warning(f"LLM API returned HTTP {resp.status_code}. Using fallback provider={self.provider} model={self.model}.")
 
             elif self.provider in ("groq", "groq_api", "gsk"):
-                # Groq OpenAI-compatible — better models ranked for RETAINAI investigation/reasoning:
-                # 1) deepseek-r1-distill-llama-70b — best reasoning (chain-of-thought distilled, excels at root-cause)
-                # 2) meta-llama/llama-4-maverick-17b-128e-instruct — newest 128k context
-                # 3) llama-3.3-70b-versatile — best general (default, json_object stable)
-                # 4) qwen/qwen3-32b — strong multilingual
-                # For hackathon demo, default to llama-3.3-70b-versatile; set LLM_MODEL=deepseek-r1-distill-llama-70b for deeper reasoning
+                # Groq production Aug 2026 — only 2 text models remain (Llama deprecated 16 Aug 2026):
+                # 1) openai/gpt-oss-120b ~500tps $0.15/$0.60 — flagship, Groq's recommended replacement for llama-3.3-70b
+                # 2) openai/gpt-oss-20b ~1000tps $0.075/$0.30 — fastest, recommended for llama-3.1-8b
+                # Legacy llama-3.3-70b/llama-3.1-8b shut down 16 Aug 2026 per Groq deprecation
                 url = "https://api.groq.com/openai/v1/chat/completions"
-                # Auto-map gemini/gpt model name to groq default if user forgot to change model
+                # Auto-map deprecated/foreign model names to current Groq production
                 effective_model = self.model
-                if "gemini" in effective_model.lower() or "gpt" in effective_model.lower():
-                    effective_model = "llama-3.3-70b-versatile"
+                # If user left old llama or gpt-4o/gemini, map to current production
+                if "llama-3.3" in effective_model.lower() or "llama-3.1" in effective_model.lower():
+                    effective_model = "openai/gpt-oss-120b"
+                elif "gemini" in effective_model.lower() or effective_model.lower() in ("gpt-4o", "gpt-4o-mini", "gpt-4-turbo"):
+                    effective_model = "openai/gpt-oss-120b"
                 headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
                 payload = {
                     "model": effective_model,

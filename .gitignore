@@ -77,3 +77,6 @@ tmp/
 # session artifacts
 session-*.md
 
+# transcript exports (raw session copies — not for commit, keeps repo clean for submission)
+transcript/
+
