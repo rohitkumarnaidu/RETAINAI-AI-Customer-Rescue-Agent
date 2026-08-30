@@ -67,6 +67,10 @@ htmlcov/
 *.sqlite
 *.sqlite3
 *.db
+*.db-shm
+*.db-wal
+.python-version
+chroma_data/
 tmp/
 *.log
 

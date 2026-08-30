@@ -112,8 +112,20 @@ class LearningEngine:
             outcome.customer_id = intervention.customer_id
             if not outcome.evidence_ids:
                 outcome.evidence_ids = [intervention.id]
-            await self.intervention_repo.create_outcome(outcome)
-
+            # Idempotency: if outcome already exists for this intervention, return existing (S64)
+            existing_outcome = await self.intervention_repo.get_outcome_by_intervention(intervention_id)
+            if existing_outcome is not None:
+                logger.info(f"Idempotent outcome: intervention {intervention_id} already has outcome {existing_outcome.id}, returning existing")
+                return existing_outcome
+            try:
+                await self.intervention_repo.create_outcome(outcome)
+            except Exception as e:
+                # Handle race unique constraint → fetch existing
+                if "UNIQUE" in str(e).upper() or "unique" in str(e).lower():
+                    existing = await self.intervention_repo.get_outcome_by_intervention(intervention_id)
+                    if existing:
+                        return existing
+                raise
             # Learning candidate pipeline: always create candidate; validation gate decides promotion
             await self._create_learning_candidate(intervention, outcome)
 

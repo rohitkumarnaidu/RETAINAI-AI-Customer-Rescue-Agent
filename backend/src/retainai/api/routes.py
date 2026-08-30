@@ -305,14 +305,14 @@ async def get_agent_run(run_id: str, db: AsyncSession = Depends(get_db), user: d
 
 
 @router.get("/customers/{customer_id}/interventions", response_model=List[InterventionSchema])
-async def get_interventions(customer_id: str, db: AsyncSession = Depends(get_db)):
+async def get_interventions(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Get interventions for customer."""
     service = InterventionService(db)
     return await service.get_customer_interventions(customer_id)
 
 
 @router.post("/interventions", response_model=InterventionSchema)
-async def create_intervention(req: InterventionCreateRequest, db: AsyncSession = Depends(get_db)):
+async def create_intervention(req: InterventionCreateRequest, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Create new intervention proposed plan."""
     service = InterventionService(db)
     inv = Intervention(
@@ -329,7 +329,7 @@ async def create_intervention(req: InterventionCreateRequest, db: AsyncSession =
 
 
 @router.post("/interventions/{intervention_id}/approve", response_model=InterventionSchema)
-async def approve_intervention(intervention_id: str, approved_by: str = "CSM", db: AsyncSession = Depends(get_db)):
+async def approve_intervention(intervention_id: str, approved_by: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Approve an intervention plan (S15)."""
     if not intervention_id or len(intervention_id) > 80 or ";" in intervention_id:
         raise HTTPException(status_code=400, detail="Invalid intervention_id")
@@ -343,7 +343,7 @@ async def approve_intervention(intervention_id: str, approved_by: str = "CSM", d
 
 
 @router.post("/interventions/{intervention_id}/reject", response_model=InterventionSchema)
-async def reject_intervention(intervention_id: str, reason: str = "No reason", actor: str = "CSM", db: AsyncSession = Depends(get_db)):
+async def reject_intervention(intervention_id: str, reason: str = "No reason", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Reject intervention — captures human feedback as learning signal (S15/S48)."""
     service = InterventionService(db)
     inv = await service.reject_intervention(intervention_id, reason=reason, actor=actor)
@@ -353,7 +353,7 @@ async def reject_intervention(intervention_id: str, reason: str = "No reason", a
 
 
 @router.post("/interventions/{intervention_id}/modify", response_model=InterventionSchema)
-async def modify_intervention(intervention_id: str, modified_action: Dict[str, Any] = {}, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db)):
+async def modify_intervention(intervention_id: str, modified_action: Dict[str, Any] = {}, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Modify intervention — captures modified recommendation as preference (S48F)."""
     service = InterventionService(db)
     inv = await service.modify_intervention(intervention_id, modified_action=modified_action, reason=reason, actor=actor)
@@ -364,7 +364,7 @@ async def modify_intervention(intervention_id: str, modified_action: Dict[str, A
 
 # Alias endpoints per S34 spec
 @router.post("/recommendations/{recommendation_id}/approve")
-async def approve_recommendation_alias(recommendation_id: str, approved_by: str = "CSM", db: AsyncSession = Depends(get_db)):
+async def approve_recommendation_alias(recommendation_id: str, approved_by: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     service = InterventionService(db)
     # Try direct id then recommendation_id
     inv = await service.approve_intervention(recommendation_id, approved_by=approved_by)
@@ -380,7 +380,7 @@ async def approve_recommendation_alias(recommendation_id: str, approved_by: str 
 
 
 @router.post("/recommendations/{recommendation_id}/reject")
-async def reject_recommendation_alias(recommendation_id: str, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db)):
+async def reject_recommendation_alias(recommendation_id: str, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     service = InterventionService(db)
     res = await db.execute(select(Intervention).where(Intervention.recommendation_id == recommendation_id))
     found = res.scalar_one_or_none()
@@ -392,7 +392,7 @@ async def reject_recommendation_alias(recommendation_id: str, reason: str = "", 
 
 
 @router.post("/recommendations/{recommendation_id}/modify")
-async def modify_recommendation_alias(recommendation_id: str, modified_action: Dict[str, Any] = {}, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db)):
+async def modify_recommendation_alias(recommendation_id: str, modified_action: Dict[str, Any] = {}, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     service = InterventionService(db)
     res = await db.execute(select(Intervention).where(Intervention.recommendation_id == recommendation_id))
     found = res.scalar_one_or_none()
@@ -404,7 +404,7 @@ async def modify_recommendation_alias(recommendation_id: str, modified_action: D
 
 
 @router.post("/interventions/{intervention_id}/outcome", response_model=OutcomeSchema)
-async def record_outcome(intervention_id: str, req: OutcomeCreateRequest, db: AsyncSession = Depends(get_db)):
+async def record_outcome(intervention_id: str, req: OutcomeCreateRequest, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Record intervention outcome and trigger learning validation gate."""
     engine = LearningEngine(db)
     # Support both path param and body field; body field is now optional
@@ -421,7 +421,7 @@ async def record_outcome(intervention_id: str, req: OutcomeCreateRequest, db: As
 
 
 @router.get("/portfolio")
-async def get_portfolio_summary(db: AsyncSession = Depends(get_db)):
+async def get_portfolio_summary(db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Portfolio Summary View."""
     customer_repo = CustomerRepository(db)
     customers = await customer_repo.list_all()
@@ -444,6 +444,7 @@ async def get_portfolio_summary(db: AsyncSession = Depends(get_db)):
 @router.get("/learning/memories", response_model=List[ExperienceMemorySchema])
 async def list_experience_memories(
     db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
     limit: int = 50,
     offset: int = 0,
 ):
@@ -456,6 +457,7 @@ async def list_experience_memories(
 @router.get("/experience-memory", response_model=List[ExperienceMemorySchema])
 async def list_experience_memories_alias(
     db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
     limit: int = 50,
     offset: int = 0,
 ):
@@ -468,6 +470,7 @@ async def list_experience_memories_alias(
 @router.get("/interventions", response_model=List[InterventionSchema])
 async def list_all_interventions(
     db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
     limit: int = 50,
     offset: int = 0,
     status: Optional[str] = None,
@@ -485,6 +488,7 @@ async def list_all_interventions(
 @router.get("/outcomes", response_model=List[OutcomeSchema])
 async def list_all_outcomes(
     db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
     limit: int = 50,
     offset: int = 0,
 ):
@@ -495,7 +499,7 @@ async def list_all_outcomes(
 
 
 @router.get("/metrics/observability")
-async def get_observability_metrics(db: AsyncSession = Depends(get_db)):
+async def get_observability_metrics(db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Observability metrics per S44."""
     from sqlalchemy import select
     from retainai.db.models import AgentRun
@@ -526,7 +530,7 @@ async def get_observability_metrics(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/config/prompts")
-async def get_dynamic_prompts():
+async def get_dynamic_prompts(user: dict = Depends(get_current_user)):
     """Dynamic System Prompt inspection (S: dynamic prompt)."""
     from retainai.agents.investigation_agent import DEFAULT_SYSTEM_PROMPT as INV_DEF
     from retainai.agents.action_agent import DEFAULT_SYSTEM_PROMPT as ACT_DEF
@@ -551,7 +555,7 @@ async def get_dynamic_prompts():
 
 
 @router.put("/config/prompts")
-async def update_dynamic_prompts(payload: Dict[str, Any]):
+async def update_dynamic_prompts(payload: Dict[str, Any], user: dict = Depends(get_current_user)):
     """Update dynamic system prompts at runtime (no restart required)."""
     from retainai.config import settings
     if "investigation" in payload:
@@ -575,7 +579,7 @@ async def update_dynamic_prompts(payload: Dict[str, Any]):
 
 
 @router.post("/replay/{run_id}")
-async def replay_agent_run(run_id: str, db: AsyncSession = Depends(get_db)):
+async def replay_agent_run(run_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Deterministic replay per S31: recorded tool/retrieval replay mode."""
     from retainai.db.models import AgentRun
     res = await db.execute(select(AgentRun).where(AgentRun.id == run_id))

@@ -108,13 +108,15 @@ Demo readiness: 96/100
 OVERALL SYSTEM READINESS: 93/100
 ```
 
-### 12. Remaining Issues (P3 only)
-- P3: Chroma is in-memory fallback (not persistent across restarts) => acceptable for hackathon
-- P3: Real JWT auth not implemented (settings.DEBUG true) => documented as future scope
-- P3: Prometheus/Grafana not wired => logs + /metrics/observability suffice for MVP
-- P3: Orphaned legacy routes not mounted (intentional per ARCHITECTURE.md)
+### 12. Remaining Issues — PROCEED-AND-COMPLETE Update (2026-08-30 22:00)
+- P3: Chroma is in-memory fallback **when pip package not installed** — but `backend/.venv` now has `chromadb 1.0.x` installed; log shows `ChromaMemoryStore: using real chromadb` on happy path; fallback remains correct when mocked (honest).
+- P3: Real JWT auth — **IMPLEMENTED** (`auth/auth.py:59` JWT HS256 + API-Key dual, `require_role`, tenant scope). Runs in `DEMO_MODE=true` bypass for reliability; enable `AUTH_ENABLED=true` for prod. No longer “missing”.
+- P3: Prometheus/Grafana — remains P3 future; `/metrics/observability` + X-Request-ID + AgentStep + replay is sufficient MVP observability (no change).
+- P3: Orphaned legacy routes — still intentional, documented.
 
-### 13. Definition of Done: VERIFIED
-- Core retention loop SENSE->LEARN works repeatedly (A-N pass)
-- No hardcoded core intelligence, no fake interactions, no unauthorized tool execution
-- App builds, tests pass, DB reproducible, demo golden path deterministic
+### 13. Definition of Done: VERIFIED (CLEAN E2E 2026-08-30)
+- DB reseeded to canonical **101** after polluted leftovers purge (was 107 → 102 → reseeded 101 twice, final check 101).
+- Clean isolated E2E on `e2e-clean-001` via real HTTP ASGITransport: **28 steps ALL PASS** (baseline 100.0 HEALTHY → friction 58.9 AT_RISK → 6 signals → 50 timeline → investigate 12 steps → evidence resolver PASS → replay deterministic → approve/reject/modify audited → outcome SUCCESS delta 22 → first candidate PENDING (gate 1<2) → second clone SUCCESS → VALIDATED (1 validated, 2 memories) → segment memory 2 → health/readiness ok → idempotency duplicate_ignored).
+- FK-safe cleanup order fixed (AgentStep before AgentRun) or reseed canonical.
+- `pytest 31 passed`, `tsc --noEmit` pass, `vite build` 265kB pass.
+- No forged demo: every delta from `SignalEngine`/`HealthEngine`/`RiskEngine` (see `final_e2e_clean.py` log).

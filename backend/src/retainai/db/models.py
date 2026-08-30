@@ -368,7 +368,7 @@ class InterventionOutcome(Base):
     intervention: Mapped["Intervention"] = relationship(back_populates="outcome")
 
     __table_args__ = (
-        Index("idx_outcome_intervention", "intervention_id"),
+        Index("idx_outcome_intervention", "intervention_id", unique=True),
         Index("idx_outcome_customer", "customer_id"),
         {"extend_existing": True},
     )

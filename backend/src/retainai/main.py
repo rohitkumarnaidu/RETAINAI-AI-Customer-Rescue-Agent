@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="RETAINAI - The Autonomous Customer Rescue Agent API",
+    description="RETAINAI - The Autonomous Customer Rescue Agent API (SENSE→THINK→ACT→MEASURE→LEARN) — pagination via ?limit/offset, filtering via ?risk_level/segment/search, sorting via ?sort_by/sort_order",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -52,9 +52,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Request ID + observability middleware (S48/S49)
+# Simple in-memory rate limiting (S63/S42 minimal) — 120 req/min per IP for API routes
+from collections import defaultdict
+_rate_bucket: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT = 120  # req per 60s
+_RATE_WINDOW = 60
+
+# Request ID + observability + rate limiting middleware (S48/S49)
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
+    # Rate limit only API routes, not /health /readiness
+    if request.url.path.startswith("/api/"):
+        ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        bucket = _rate_bucket[ip]
+        # prune old
+        bucket[:] = [t for t in bucket if now - t < _RATE_WINDOW]
+        if len(bucket) >= _RATE_LIMIT:
+            return JSONResponse(status_code=429, content={"error": {"code": "RATE_LIMITED", "message": "Too many requests, retry in 60s", "request_id": request.headers.get("X-Request-ID") or f"req_{uuid.uuid4().hex[:8]}"}})
+        bucket.append(now)
     request_id = request.headers.get("X-Request-ID") or f"req_{uuid.uuid4().hex[:8]}"
     start = time.time()
     response = await call_next(request)
