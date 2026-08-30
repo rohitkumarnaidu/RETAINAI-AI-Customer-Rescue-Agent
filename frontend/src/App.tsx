@@ -82,16 +82,23 @@ export function App() {
     } finally { setResetting(false); }
   };
 
-  const navItems: {id:Tab,label:string,icon:any,desc:string}[] = [
-    {id:'command', label:'Command Center', icon:LayoutDashboard, desc:'What needs attention'},
-    {id:'customers', label:'Customers', icon:Users, desc:'Portfolio & filters'},
-    {id:'customer360', label:'Customer 360', icon:UserCircle2, desc:'Investigation workspace'},
-    {id:'investigations', label:'Investigations', icon:SearchCode, desc:'Agent runs & evidence'},
-    {id:'interventions', label:'Interventions', icon:ClipboardList, desc:'Plans & outcomes'},
-    {id:'learning', label:'Learning', icon:GraduationCap, desc:'Experience memory'},
-    {id:'onboarding', label:'Onboarding', icon:Users, desc:'Import & connect'},
-    {id:'settings', label:'Settings', icon:Settings, desc:'Weights · LLM · Prompts'},
-    {id:'audit', label:'Activity', icon:ScrollText, desc:'Audit trail'},
+  // Simplified, ordered by workflow: Setup → Workspace → Intelligence → System
+  const navSections: {title:string, items:{id:Tab,label:string,icon:any}[]}[] = [
+    {title:'START', items:[{id:'onboarding', label:'Onboarding', icon:Users}]},
+    {title:'WORKSPACE', items:[
+      {id:'command', label:'Command Center', icon:LayoutDashboard},
+      {id:'customers', label:'Customers', icon:Users},
+      {id:'customer360', label:'Customer 360', icon:UserCircle2},
+    ]},
+    {title:'INTELLIGENCE', items:[
+      {id:'investigations', label:'Investigations', icon:SearchCode},
+      {id:'interventions', label:'Interventions', icon:ClipboardList},
+      {id:'learning', label:'Learning', icon:GraduationCap},
+    ]},
+    {title:'SYSTEM', items:[
+      {id:'settings', label:'Settings', icon:Settings},
+      {id:'audit', label:'Activity', icon:ScrollText},
+    ]},
   ];
 
   // High-engineer entry: login/signup is the demo start. Show full-screen LoginPage until auth or bypass.
@@ -115,9 +122,9 @@ export function App() {
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 h-7 flex items-center justify-between gap-4">
           <span className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Demo environment · High engineers · Top models (Groq · OpenAI · Gemini) · SENSE → THINK → ACT → MEASURE → LEARN
+            {hasCustomers===false ? 'No customers — start with Onboarding → Import' : `Tenant ${tenantId?.slice(0,8) || '—'} · SENSE → THINK → ACT → MEASURE → LEARN`}
           </span>
-          <span className="hidden md:inline text-slate-400">Updated {now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · End-to-end · tenant {tenantId || '—'}</span>
+          <span className="hidden md:inline text-slate-400">Updated {now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · {hasCustomers===false ? '0 customers' : 'Dynamic'} · Groq · OpenAI · Gemini</span>
         </div>
       </div>
 
@@ -172,24 +179,25 @@ export function App() {
 
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6 flex gap-6">
         <aside className="hidden lg:block w-[220px] shrink-0 sticky top-[88px] h-fit">
-          <nav className="space-y-1">
-            {navItems.map(item=>{
-              const Active = item.icon;
-              const active = activeTab===item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={()=>setActiveTab(item.id)}
-                  className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${active ? 'bg-[#0F172A] text-white shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-900 border border-transparent hover:border-slate-200 hover:shadow-sm'}`}
-                >
-                  <Active className={`w-4 h-4 ${active ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="flex-1">
-                    <span className={`block leading-none ${active? 'font-semibold':'font-medium'}`}>{item.label}</span>
-                    <span className={`block text-[11px] leading-none mt-1 ${active? 'text-slate-300':'text-slate-400'}`}>{item.desc}</span>
-                  </span>
-                </button>
-              )
-            })}
+          <nav className="space-y-4">
+            {navSections.map(sec=>(
+              <div key={sec.title}>
+                <div className="text-[10px] font-mono tracking-widest text-slate-400 px-3 mb-1">{sec.title}</div>
+                <div className="space-y-1">
+                  {sec.items.map(item=>{
+                    const Active=item.icon; const active=activeTab===item.id;
+                    const isOnboarding = item.id==='onboarding' && hasCustomers===false;
+                    return (
+                      <button key={item.id} onClick={()=>setActiveTab(item.id)} className={`w-full text-left flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${active ? 'bg-[#0F172A] text-white shadow-sm' : isOnboarding ? 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100' : 'text-slate-600 hover:bg-white hover:text-slate-900 border border-transparent hover:border-slate-200'}`}>
+                        <Active className={`w-4 h-4 ${active ? 'text-white' : isOnboarding ? 'text-amber-600' : 'text-slate-400'}`} />
+                        <span className="font-medium">{item.label}</span>
+                        {isOnboarding && <span className="ml-auto text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-mono">START</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
           <div className="mt-6 bg-white border border-slate-200 rounded-xl p-3.5">
             <div className="text-xs font-semibold text-slate-900">How RETAINAI works</div>
@@ -197,20 +205,27 @@ export function App() {
               SENSE → THINK → ACT → MEASURE → LEARN
             </div>
             <div className="mt-2 text-xs text-slate-600 leading-relaxed">
-              Detects meaningful change, investigates with evidence, recommends next-best action, measures outcome, learns.
+              Detects change, investigates with evidence, acts, measures, learns — per tenant.
             </div>
           </div>
-          <div className="mt-3 text-[11px] text-slate-400 font-mono px-1">© 2026 RETAINAI · BuildSprint</div>
+          <div className="mt-3 text-[11px] text-slate-400 font-mono px-1">© 2026 RETAINAI · tenant {tenantId?.slice(0,8) || '—'}</div>
         </aside>
 
         {mobileNavOpen && (
           <div className="lg:hidden fixed inset-0 z-30 bg-black/20" onClick={()=>setMobileNavOpen(false)}>
             <div onClick={e=>e.stopPropagation()} className="w-[280px] h-full bg-white border-r border-slate-200 p-4 overflow-auto">
-              <nav className="space-y-1">
-                {navItems.map(item=>{
-                  const Icon=item.icon; const active=activeTab===item.id;
-                  return <button key={item.id} onClick={()=>{setActiveTab(item.id); setMobileNavOpen(false)}} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${active? 'bg-slate-900 text-white':'text-slate-600 hover:bg-slate-50'}`}><Icon className="w-4 h-4"/>{item.label}</button>
-                })}
+              <nav className="space-y-4">
+                {navSections.map(sec=>(
+                  <div key={sec.title}>
+                    <div className="text-[10px] font-mono tracking-widest text-slate-400 px-2 mb-1">{sec.title}</div>
+                    <div className="space-y-1">
+                      {sec.items.map(item=>{
+                        const Icon=item.icon; const active=activeTab===item.id;
+                        return <button key={item.id} onClick={()=>{setActiveTab(item.id); setMobileNavOpen(false)}} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${active? 'bg-slate-900 text-white':'text-slate-600 hover:bg-slate-50'}`}><Icon className="w-4 h-4"/>{item.label}</button>
+                      })}
+                    </div>
+                  </div>
+                ))}
               </nav>
             </div>
           </div>
