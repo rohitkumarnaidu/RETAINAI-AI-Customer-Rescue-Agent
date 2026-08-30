@@ -1,402 +1,326 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Customer,
-  TimelineEvent,
-  getCustomerById,
-  getCustomerTimeline,
-  getCustomerRisk,
-  runInvestigation,
-  FullAgentInvestigationResponse,
-  approveIntervention
-} from '../services/api';
-import { RiskBadge } from './RiskBadge';
-import {
-  Sparkles,
-  Bot,
-  AlertTriangle,
-  Building,
-  Mail,
-  Activity,
-  CheckCircle2,
-  TrendingDown,
-  Clock,
-  ArrowRight,
-  ShieldAlert,
-  ListOrdered,
-  FileText,
-  ThumbsUp
-} from 'lucide-react';
+import { getCustomerById, getCustomerTimeline, getCustomerRisk, runInvestigation, approveIntervention, rejectIntervention, getCustomerSignals, getCustomerMemory, getCustomerInterventions, getAgentRuns } from '../services/api';
+import { RiskBadge, HealthRing, ConfidenceBadge } from './RiskBadge';
+import { Card, SectionHeader, Skeleton, ErrorState, EmptyState, EvidenceDrawer } from './ui';
+import { Building, Mail, Activity, Bot, FileText, ListOrdered, CheckCircle2, Clock, TrendingDown, ShieldAlert, Zap, ArrowRight, Sparkles } from 'lucide-react';
 
-interface Customer360Props {
-  customerId: string;
-}
+export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
+  const [customer,setCustomer]=useState<any>(null);
+  const [timeline,setTimeline]=useState<any[]>([]);
+  const [risk,setRisk]=useState<any>(null);
+  const [signals,setSignals]=useState<any[]>([]);
+  const [memory,setMemory]=useState<any[]>([]);
+  const [interventions,setInterventions]=useState<any[]>([]);
+  const [runs,setRuns]=useState<any[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [investigating,setInvestigating]=useState(false);
+  const [result,setResult]=useState<any>(null);
+  const [error,setError]=useState<string|null>(null);
+  const [drawerOpen,setDrawerOpen]=useState(false);
+  const [approving,setApproving]=useState(false);
+  const [approvedId,setApprovedId]=useState<string|null>(null);
+  const [timelineFilter,setTimelineFilter]=useState<string>('ALL');
 
-export const Customer360: React.FC<Customer360Props> = ({ customerId }) => {
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
-  const [riskData, setRiskData] = useState<any>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [investigating, setInvestigating] = useState<boolean>(false);
-  const [investigationResult, setInvestigationResult] = useState<FullAgentInvestigationResponse | null>(null);
-  const [approving, setApproving] = useState<boolean>(false);
-  const [approvedInterventionId, setApprovedInterventionId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const load = async()=>{
+    try{
+      setLoading(true); setError(null); setResult(null);
+      const [cust, tl, riskResp, sigs, mems, inters, agRuns] = await Promise.all([
+        getCustomerById(customerId),
+        getCustomerTimeline(customerId,60).catch(()=>[]),
+        getCustomerRisk(customerId).catch(()=>null),
+        getCustomerSignals(customerId).catch(()=>[]),
+        getCustomerMemory(customerId).catch(()=>[]),
+        getCustomerInterventions(customerId).catch(()=>[]),
+        getAgentRuns(customerId).catch(()=>[]),
+      ]);
+      setCustomer(cust); setTimeline(tl); setRisk(riskResp); setSignals(Array.isArray(sigs)?sigs:[]); setMemory(Array.isArray(mems)?mems:[]); setInterventions(Array.isArray(inters)?inters:[]); setRuns(Array.isArray(agRuns)?agRuns:[]);
+    } catch(e:any){ setError(e.message||'Failed to load'); }
+    finally{ setLoading(false); }
+  };
+  useEffect(()=>{ load(); },[customerId]);
 
-  useEffect(() => {
-    const fetchCustomerData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        setInvestigationResult(null);
-        setApprovedInterventionId(null);
-
-        const [cust, timelineData, riskResp] = await Promise.all([
-          getCustomerById(customerId),
-          getCustomerTimeline(customerId, 60).catch(() => []),
-          getCustomerRisk(customerId).catch(() => null)
-        ]);
-
-        setCustomer(cust);
-        setTimeline(timelineData);
-        setRiskData(riskResp);
-      } catch (err: any) {
-        setError(err.message || 'Failed to fetch customer 360 data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCustomerData();
-  }, [customerId]);
-
-  const handleRunInvestigation = async () => {
-    try {
-      setInvestigating(true);
-      setError(null);
-      const result = await runInvestigation(customerId);
-      setInvestigationResult(result);
-      
-      // Refresh risk and timeline
-      const updatedRisk = await getCustomerRisk(customerId).catch(() => null);
-      const updatedTimeline = await getCustomerTimeline(customerId, 60).catch(() => []);
-      setRiskData(updatedRisk);
-      setTimeline(updatedTimeline);
-    } catch (err: any) {
-      setError(err.message || 'Agent Investigation failed');
-    } finally {
-      setInvestigating(false);
-    }
+  const handleInvestigate = async()=>{
+    try{
+      setInvestigating(true); setError(null);
+      const r = await runInvestigation(customerId);
+      setResult(r);
+      const [updatedRisk, updatedTl, updatedRuns, updatedInters] = await Promise.all([
+        getCustomerRisk(customerId).catch(()=>null),
+        getCustomerTimeline(customerId,60).catch(()=>[]),
+        getAgentRuns(customerId).catch(()=>[]),
+        getCustomerInterventions(customerId).catch(()=>[]),
+      ]);
+      setRisk(updatedRisk); setTimeline(updatedTl); setRuns(Array.isArray(updatedRuns)?updatedRuns:[]); setInterventions(Array.isArray(updatedInters)?updatedInters:[]);
+    } catch(e:any){ setError(e.message||'Investigation failed'); }
+    finally{ setInvestigating(false); }
   };
 
-  const handleApproveAction = async () => {
-    const invId = investigationResult?.intervention_id;
-    if (!invId) return;
-    try {
-      setApproving(true);
-      await approveIntervention(invId, customer?.csm_name || "CSM");
-      setApprovedInterventionId(invId);
-    } catch (err: any) {
-      setError(err.message || 'Failed to approve intervention');
-    } finally {
-      setApproving(false);
-    }
+  const handleApprove = async()=>{
+    const id=result?.intervention_id; if(!id) return;
+    try{ setApproving(true); await approveIntervention(id, customer?.csm_name||'CSM'); setApprovedId(id); const updated=await getCustomerInterventions(customerId).catch(()=>[]); setInterventions(Array.isArray(updated)?updated:[]); }
+    catch(e:any){ setError(e.message||'Approve failed'); }
+    finally{ setApproving(false); }
+  };
+  const handleReject = async()=>{
+    const id=result?.intervention_id; if(!id) return;
+    try{ await rejectIntervention(id, 'Not relevant for this account', customer?.csm_name||'CSM'); setResult(null); setError('Recommendation rejected — feedback captured for learning'); }
+    catch(e:any){ setError(e.message||'Reject failed'); }
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 text-slate-400 gap-3">
-        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm">Retrieving Customer 360 Telemetry & Timeline for {customerId}...</p>
-      </div>
-    );
-  }
-
-  if (!customer) {
-    return (
-      <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl text-center text-slate-400">
-        Customer context not found. Select an account from the Command Center.
-      </div>
-    );
-  }
-
-  const currentRiskLevel = riskData?.risk_level || (Array.isArray(riskData) && riskData[0]?.risk_level) || 'HEALTHY';
-  const healthScore = riskData?.health_score ?? (riskData?.risk_score ? 100 - riskData.risk_score : 85);
-  const rootCauseText = riskData?.primary_root_cause || riskData?.root_cause || (Array.isArray(riskData) && riskData[0]?.root_cause) || 'No severe risk detected';
-  const reasoningText = riskData?.reasoning_summary || (Array.isArray(riskData) && riskData[0]?.reasoning_summary) || 'Telemetry within nominal ranges.';
+  if(loading) return <div className="space-y-4"><div className="bg-white border border-slate-200 rounded-xl p-6 space-y-3"><Skeleton className="h-6 w-1/3"/><Skeleton className="h-4 w-full"/><Skeleton className="h-4 w-2/3"/></div><div className="grid grid-cols-3 gap-4">{[1,2,3].map(i=><Card key={i}><Skeleton className="h-20 w-full"/></Card>)}</div></div>;
+  if(!customer) return <EmptyState title="Customer not found" description="Select an account from Command Center or Customers." />;
+  const riskLevel = risk?.risk_level || 'HEALTHY';
+  const healthScore = risk?.health_score ?? customer.health_score ?? 85;
+  const healthComps = risk?.health_components || {};
+  const rootCause = risk?.primary_root_cause || risk?.root_cause || 'No severe risk detected';
+  const reasoning = risk?.reasoning_summary || 'Telemetry within nominal ranges.';
+  const filteredTimeline = timeline.filter((e:any)=>{
+    if(timelineFilter==='ALL') return true;
+    const src=(e.source||e.type||'').toUpperCase();
+    return src.includes(timelineFilter);
+  });
 
   return (
-    <div className="space-y-6">
-      {/* Header Card */}
-      <div className="bg-slate-900/80 border border-slate-800 p-6 rounded-xl backdrop-blur-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-100">{customer.name}</h1>
-            <RiskBadge level={currentRiskLevel} size="lg" />
-          </div>
-          <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 mt-2 font-mono">
-            <span className="flex items-center gap-1.5"><Building className="w-3.5 h-3.5 text-slate-500" /> {customer.domain}</span>
-            <span>·</span>
-            <span>Industry: {customer.industry}</span>
-            <span>·</span>
-            <span>Plan: <strong className="text-slate-200">{customer.plan}</strong></span>
-            <span>·</span>
-            <span>ARR: <strong className="text-emerald-400">${customer.arr.toLocaleString()}</strong></span>
+    <div className="space-y-5">
+      <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <HealthRing score={healthScore} size={64} />
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-semibold tracking-tight">{customer.name}</h1>
+              <RiskBadge level={riskLevel} size="md" />
+              {customer.is_false_positive_candidate && <span className="text-xs border border-amber-200 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-mono">False-positive candidate</span>}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1 font-mono">
+              <span className="inline-flex items-center gap-1"><Building className="w-3 h-3"/>{customer.domain}</span>
+              <span>·</span><span>{customer.industry}</span><span>·</span><span>{customer.segment}</span>
+              <span>·</span><span className="text-slate-700 font-medium">{customer.plan}</span>
+              <span>·</span><span className="text-emerald-700 font-semibold">${customer.arr.toLocaleString()} ARR</span>
+            </div>
+            <div className="text-xs text-slate-500 mt-1">Renewal {customer.renewal_date} · Lifecycle {customer.lifecycle_stage} · CSM {customer.csm_name}</div>
           </div>
         </div>
-
-        <button
-          onClick={handleRunInvestigation}
-          disabled={investigating}
-          className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-5 py-2.5 rounded-lg font-medium text-sm transition-all shadow-lg shadow-indigo-950/50 disabled:opacity-50"
-        >
-          {investigating ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>Agent Investigating Telemetry...</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4 text-indigo-200" />
-              <span>Run AI Investigation</span>
-            </>
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleInvestigate} disabled={investigating} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50">
+            {investigating ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/><span>Investigating…</span></> : <><Sparkles className="w-4 h-4"/>Run investigation</>}
+          </button>
+        </div>
       </div>
+      {error && <ErrorState message={error} onRetry={load} />}
 
-      {error && (
-        <div className="p-4 bg-rose-950/30 border border-rose-800/50 rounded-xl text-rose-300 text-xs flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Main Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left Column: Health Metrics & Profile */}
-        <div className="space-y-6 lg:col-span-1">
-          {/* Health Score Overview */}
-          <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-xl">
-            <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-indigo-400" />
-              <span>Deterministic Risk Engine</span>
-            </h3>
-
-            <div className="space-y-4">
-              <div className="flex items-end justify-between border-b border-slate-800 pb-3">
-                <div>
-                  <div className="text-xs text-slate-400">Health Index</div>
-                  <div className="text-3xl font-extrabold text-slate-100 mt-0.5">
-                    {Math.round(healthScore)} <span className="text-xs font-normal text-slate-500">/ 100</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-slate-400">Risk Assessment</div>
-                  <div className="text-xs font-semibold text-rose-400 mt-1 flex items-center justify-end gap-1">
-                    <TrendingDown className="w-3.5 h-3.5" />
-                    {currentRiskLevel}
-                  </div>
-                </div>
-              </div>
-
-              {/* Primary Root Cause */}
-              <div className="bg-slate-950/80 p-3 rounded-lg border border-slate-800 text-xs space-y-1">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400">Primary Root Cause</span>
-                <p className="font-semibold text-slate-200">{rootCauseText}</p>
-                <p className="text-slate-400 text-[11px] leading-relaxed">{reasoningText}</p>
-              </div>
+      <Card>
+        <SectionHeader title="Why this customer is at risk" subtitle="Evidence-linked explanation — not a black-box score" icon={ShieldAlert} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <div className="flex items-baseline gap-3">
+              <span className="text-3xl font-semibold">{Math.round(healthScore)}<span className="text-sm font-normal text-slate-400">/100</span></span>
+              <span className="text-sm flex items-center gap-1 text-slate-600"><TrendingDown className="w-4 h-4"/> {riskLevel}</span>
+              {risk?.confidence !==undefined && <span className="text-xs font-mono text-slate-500">Confidence {(risk.confidence*100).toFixed(0)}%</span>}
             </div>
-          </div>
-
-          {/* Account Metadata Card */}
-          <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-xl space-y-3">
-            <h3 className="text-sm font-semibold text-slate-200 mb-2">Account Ownership</h3>
-            <div className="text-xs space-y-2 text-slate-300">
-              <div className="flex justify-between">
-                <span className="text-slate-500">CSM Manager:</span>
-                <span className="font-medium">{customer.csm_name}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">CSM Email:</span>
-                <span className="font-mono text-indigo-400">{customer.csm_email}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Lifecycle Stage:</span>
-                <span className="bg-slate-800 px-2 py-0.5 rounded text-[11px]">{customer.lifecycle_stage}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Contract Renewal:</span>
-                <span className="font-mono text-slate-300">{customer.renewal_date}</span>
-              </div>
+            <div className="mt-3">
+              <div className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Primary root cause</div>
+              <div className="text-sm font-semibold text-slate-900 mt-1">{rootCause}</div>
+              <div className="text-sm text-slate-600 leading-relaxed mt-1">{reasoning}</div>
             </div>
-          </div>
-        </div>
-
-        {/* Right Column: AI Investigation & Timeline */}
-        <div className="space-y-6 lg:col-span-2">
-          
-          {/* AI Investigation Output Card */}
-          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-900/40 p-6 rounded-xl shadow-xl">
-            <div className="flex items-center justify-between mb-4 border-b border-slate-800/80 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-indigo-950 rounded-lg border border-indigo-800/50">
-                  <Bot className="w-5 h-5 text-indigo-400" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-slate-100">Autonomous Investigation Agent Output</h2>
-                  <p className="text-xs text-slate-400">Root Cause Synthesis, Evidence Grounding & Action Plan</p>
-                </div>
-              </div>
-              {investigationResult && (
-                <span className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800/50 px-2.5 py-1 rounded-full font-mono flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Investigation Active
-                </span>
-              )}
-            </div>
-
-            {investigationResult ? (
-              <div className="space-y-5">
-                {/* Root Cause & Confidence */}
-                <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-lg space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <ShieldAlert className="w-4 h-4" /> Root Cause Diagnosed
-                    </div>
-                    <span className="text-[11px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-800/50 px-2 py-0.5 rounded">
-                      Confidence: {(investigationResult.investigation.confidence * 100).toFixed(0)}% ({investigationResult.investigation.uncertainty_status})
-                    </span>
-                  </div>
-                  <div className="text-sm font-bold text-slate-100">
-                    {investigationResult.investigation.root_cause}
-                  </div>
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    {investigationResult.investigation.summary}
-                  </p>
-                </div>
-
-                {/* Grounding Evidence Citation IDs */}
-                {investigationResult.investigation.evidence_ids && investigationResult.investigation.evidence_ids.length > 0 && (
-                  <div className="bg-slate-950/50 border border-slate-800/80 p-3 rounded-lg text-xs space-y-1">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <FileText className="w-3.5 h-3.5 text-indigo-400" /> Evidence Grounding Citations
-                    </span>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {investigationResult.investigation.evidence_ids.map((evId) => (
-                        <span key={evId} className="bg-slate-900 border border-slate-700 text-slate-300 font-mono text-[10px] px-2 py-0.5 rounded">
-                          {evId}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Retention Action Plan & Steps */}
-                {investigationResult.retention_plan && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <ListOrdered className="w-4 h-4 text-violet-400" /> Recommended Action Plan
-                      </div>
-                      
-                      {approvedInterventionId ? (
-                        <span className="text-xs bg-emerald-950 text-emerald-300 border border-emerald-800 px-3 py-1 rounded-lg font-semibold flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Plan Approved
-                        </span>
-                      ) : (
-                        <button
-                          onClick={handleApproveAction}
-                          disabled={approving}
-                          className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg transition-all shadow-md shadow-emerald-950"
-                        >
-                          {approving ? (
-                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <ThumbsUp className="w-3.5 h-3.5" />
-                          )}
-                          <span>Approve Intervention Plan</span>
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      {investigationResult.retention_plan.plan_steps?.map((step: any, idx: number) => (
-                        <div key={idx} className="bg-slate-900/90 border border-slate-800 p-3 rounded-lg flex items-start gap-3">
-                          <span className="flex items-center justify-center w-5 h-5 bg-indigo-950 border border-indigo-800 text-indigo-400 rounded-full text-xs font-bold shrink-0 mt-0.5">
-                            {step.step || idx + 1}
-                          </span>
-                          <div className="flex-1 text-xs">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="font-semibold text-slate-200">{step.title}</span>
-                              <span className="text-[11px] text-slate-500 font-mono">Owner: {step.owner}</span>
-                            </div>
-                            <p className="text-slate-400">{step.action}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Draft Email Card */}
-                    {investigationResult.retention_plan.draft_email && (
-                      <div className="mt-4 bg-slate-950 border border-slate-800 p-4 rounded-lg space-y-2">
-                        <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                          <Mail className="w-4 h-4" /> Generated Outreach Email
-                        </div>
-                        <div className="text-xs font-medium text-slate-200 border-b border-slate-800 pb-1">
-                          Subject: {investigationResult.retention_plan.draft_email.subject}
-                        </div>
-                        <pre className="text-xs text-slate-300 whitespace-pre-wrap font-sans leading-relaxed pt-1">
-                          {investigationResult.retention_plan.draft_email.body}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-lg space-y-2">
-                  <div className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Current Status</div>
-                  <div className="text-sm font-semibold text-slate-200">{rootCauseText}</div>
-                  <p className="text-xs text-slate-400 leading-relaxed">{reasoningText}</p>
-                </div>
-                <div className="p-4 bg-indigo-950/30 border border-indigo-800/30 rounded-lg text-xs text-indigo-300 flex items-center justify-between">
-                  <span>Click "Run AI Investigation" above to execute the multi-agent investigation workflow.</span>
-                  <ArrowRight className="w-4 h-4 shrink-0" />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Unified Customer Timeline */}
-          <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-xl space-y-4">
-            <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-indigo-400" />
-              <span>Unified Customer Timeline ({timeline.length} Events)</span>
-            </h3>
-
-            {timeline.length === 0 ? (
-              <div className="text-slate-500 text-xs py-4 text-center">No timeline telemetry records found for this period.</div>
-            ) : (
-              <div className="space-y-3 relative before:absolute before:inset-0 before:left-3 before:w-0.5 before:bg-slate-800 pl-8 max-h-96 overflow-y-auto pr-2">
-                {timeline.map((evt) => (
-                  <div key={evt.id} className="relative bg-slate-950/80 border border-slate-800 p-3 rounded-lg text-xs space-y-1">
-                    <div className="absolute -left-8 top-3.5 w-2.5 h-2.5 rounded-full bg-indigo-500 ring-4 ring-slate-900" />
-                    <div className="flex justify-between items-center text-slate-400">
-                      <span className="font-mono text-[11px]">{new Date(evt.timestamp).toLocaleString()}</span>
-                      <span className="text-[10px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800 font-mono uppercase text-slate-300">
-                        {evt.source}
-                      </span>
-                    </div>
-                    <div className="font-semibold text-slate-200">{evt.title}</div>
-                    {evt.description && <p className="text-slate-400 line-clamp-2">{evt.description}</p>}
+            {risk?.health_components && (
+              <div className="grid grid-cols-4 gap-2 mt-4">
+                {Object.entries(healthComps).map(([k,v]:any)=>(
+                  <div key={k} className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
+                    <div className="text-[11px] font-mono text-slate-500 uppercase">{k}</div>
+                    <div className={`text-lg font-semibold ${Number(v)<50?'text-red-600': Number(v)<75?'text-amber-600':'text-teal-700'}`}>{Math.round(Number(v))}</div>
                   </div>
                 ))}
               </div>
             )}
+            {signals.length>0 && (
+              <div className="mt-4">
+                <div className="text-xs font-semibold text-slate-700">Detected signals</div>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {signals.slice(0,8).map((s:any)=>(
+                    <span key={s.id||s.signal_type} className="text-xs border border-slate-200 bg-white px-2 py-1 rounded-full">{s.signal_type||s.category} · {s.severity}</span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+            <div className="text-xs font-semibold">Account</div>
+            <div className="text-sm space-y-1.5">
+              <div className="flex justify-between text-xs"><span className="text-slate-500">CSM</span><span className="font-medium">{customer.csm_name}</span></div>
+              <div className="flex justify-between text-xs"><span className="text-slate-500">Email</span><span className="font-mono text-xs">{customer.csm_email}</span></div>
+              <div className="flex justify-between text-xs"><span className="text-slate-500">Segment</span><span>{customer.segment}</span></div>
+              <div className="flex justify-between text-xs"><span className="text-slate-500">Status</span><span>{customer.status||'ACTIVE'}</span></div>
+            </div>
+            <div className="pt-3 border-t border-slate-200 space-y-1.5 text-xs">
+              <div className="font-semibold">How to use this view</div>
+              <div className="text-slate-600 leading-relaxed">Verify evidence, check investigation confidence, then act. Evidence IDs are clickable and resolve to real records.</div>
+            </div>
+          </div>
         </div>
+      </Card>
 
+      <Card>
+        <SectionHeader title="Investigation" subtitle={result ? `Run ${result.run_id} · ${result.investigation?.uncertainty_status||'READY'}` : 'Run investigation to generate evidence-grounded diagnosis'} icon={Bot} action={result && <button onClick={()=>setDrawerOpen(true)} className="text-xs border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"><FileText className="w-3.5 h-3.5"/>Evidence ({result.investigation.evidence_ids?.length||0})</button>} />
+        {!result ? (
+          <div className="space-y-3">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="text-sm font-semibold text-amber-900">No investigation yet for this view</div>
+              <div className="text-sm text-amber-800 mt-1">Click “Run investigation” to execute SENSE → THINK (health/risk/signal engines + LLM synthesis) → ACT. Evidence will be cited with resolvable IDs.</div>
+            </div>
+            {runs.length>0 && (
+              <div>
+                <div className="text-xs font-semibold text-slate-700 mb-2">Recent agent runs ({runs.length})</div>
+                <div className="space-y-2 max-h-48 overflow-auto">
+                  {runs.slice(0,4).map((r:any)=>(
+                    <div key={r.id} className="border border-slate-200 rounded-lg p-3 text-xs">
+                      <div className="flex justify-between"><span className="font-mono">{r.id}</span><span className={r.status==='COMPLETED'?'text-emerald-700':'text-amber-700'}>{r.status}</span></div>
+                      <div className="text-slate-600 mt-1 truncate">{r.output_summary||r.input_summary||'—'}</div>
+                      <div className="text-[11px] text-slate-400 mt-1">{new Date(r.started_at).toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold tracking-wide uppercase text-slate-700 inline-flex items-center gap-1.5"><ShieldAlert className="w-4 h-4"/> Root cause</div>
+                <ConfidenceBadge confidence={result.investigation.confidence} uncertainty={result.investigation.uncertainty_status} />
+              </div>
+              <div className="text-sm font-semibold mt-2">{result.investigation.root_cause}</div>
+              <div className="text-sm text-slate-700 leading-relaxed mt-1">{result.investigation.summary}</div>
+              {result.investigation.missing_evidence?.length>0 && (
+                <div className="mt-3 text-xs bg-white border border-amber-200 rounded-lg p-2.5">
+                  <span className="font-semibold text-amber-800">Missing / weak evidence:</span> <span className="text-slate-600">{result.investigation.missing_evidence.join(' · ')}</span>
+                </div>
+              )}
+            </div>
+
+            {result.investigation.evidence_ids?.length>0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {result.investigation.evidence_ids.map((id:string)=>(
+                  <span key={id} className="font-mono text-[11px] border border-slate-200 bg-white px-2 py-1 rounded-full">{id}</span>
+                ))}
+              </div>
+            )}
+
+            {result.retention_plan && (
+              <div className="border border-slate-200 rounded-xl p-4">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="text-xs font-semibold tracking-wide uppercase flex items-center gap-1.5"><ListOrdered className="w-4 h-4"/> Recommended action plan</div>
+                  <div className="flex items-center gap-2">
+                    {!approvedId ? (
+                      <>
+                        <button onClick={handleReject} className="text-xs border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50">Reject</button>
+                        <button onClick={handleApprove} disabled={approving} className="text-xs bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg hover:bg-emerald-500 disabled:opacity-50 inline-flex items-center gap-1.5">
+                          {approving ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/>: <CheckCircle2 className="w-3.5 h-3.5"/>} Approve
+                        </button>
+                      </>
+                    ) : <span className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1 rounded-full inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5"/>Approved {approvedId.slice(0,12)}…</span>}
+                  </div>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3">
+                  <div className="text-sm font-semibold">{result.retention_plan.title}</div>
+                  <div className="text-xs text-slate-600 mt-1">{result.retention_plan.objective || result.retention_plan.description}</div>
+                  <div className="text-xs mt-2 flex gap-2"><span className="border border-slate-200 bg-white px-2 py-0.5 rounded-full">{result.retention_plan.action_type}</span><span className="border border-slate-200 bg-white px-2 py-0.5 rounded-full">Priority {result.retention_plan.priority}</span></div>
+                </div>
+                <div className="space-y-2">
+                  {result.retention_plan.plan_steps?.map((s:any,i:number)=>(
+                    <div key={i} className="flex gap-3 border border-slate-200 rounded-lg p-3 bg-white">
+                      <span className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shrink-0">{s.step||i+1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{s.title}</span><span className="text-xs font-mono text-slate-500">Owner {s.owner}</span></div>
+                        <div className="text-xs text-slate-600 mt-0.5">{s.action}</div>
+                        {s.target_date && <div className="text-[11px] text-slate-400 mt-1">Target {s.target_date}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {result.retention_plan.draft_email && (
+                  <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3">
+                    <div className="text-xs font-semibold flex items-center gap-1.5"><Mail className="w-3.5 h-3.5"/> Outreach email</div>
+                    <div className="text-xs font-medium mt-1">Subject: {result.retention_plan.draft_email.subject}</div>
+                    <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed mt-2 bg-slate-50 border border-slate-200 rounded p-2.5">{result.retention_plan.draft_email.body}</pre>
+                  </div>
+                )}
+                <div className="mt-3 text-xs text-slate-500">Evidence, interpretation, recommendation, action, outcome, learning — keep them distinct. Human approval required before execution.</div>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+      <EvidenceDrawer ids={result?.investigation.evidence_ids||[]} open={drawerOpen} onClose={()=>setDrawerOpen(false)} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <Card className="lg:col-span-2">
+          <SectionHeader title={`Timeline (${filteredTimeline.length})`} subtitle="Usage · Support · Feedback · Account · Risk changes · Interventions" icon={Clock} action={
+            <div className="flex gap-1">
+              {['ALL','USAGE','SUPPORT','FEEDBACK','ACCOUNT'].map(f=>(
+                <button key={f} onClick={()=>setTimelineFilter(f)} className={`px-2 py-1 rounded-full text-xs border ${timelineFilter===f?'bg-slate-900 text-white border-slate-900':'bg-white text-slate-600 border-slate-200'}`}>{f}</button>
+              ))}
+            </div>
+          }/>
+          {filteredTimeline.length===0 ? <EmptyState title="No timeline events" description="No telemetry in the selected window." /> : (
+            <div className="space-y-2 max-h-[520px] overflow-auto pr-1 scrollbar-thin">
+              {filteredTimeline.map((e:any)=>(
+                <div key={e.id} className="border border-slate-200 rounded-lg p-3 bg-white">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-mono text-slate-500">{new Date(e.timestamp).toLocaleString()}</span>
+                    <span className="text-[11px] border border-slate-200 bg-slate-50 px-2 py-0.5 rounded-full font-mono uppercase">{e.source || e.type || e.event_type || 'EVENT'}</span>
+                  </div>
+                  <div className="text-sm font-medium mt-1">{e.title}</div>
+                  {e.description && <div className="text-xs text-slate-600 mt-0.5 line-clamp-2">{e.description}</div>}
+                  {e.details && <div className="text-[11px] text-slate-500 mt-1 truncate">{JSON.stringify(e.details).slice(0,120)}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <div className="space-y-5">
+          <Card>
+            <SectionHeader title="Intervention history" subtitle={`${interventions.length} plans`} icon={Activity} />
+            {interventions.length===0 ? <div className="text-xs text-slate-500">No interventions yet. Run investigation to generate a plan.</div> : (
+              <div className="space-y-2 max-h-[260px] overflow-auto pr-1">
+                {interventions.slice(0,6).map((iv:any)=>(
+                  <div key={iv.id} className="border border-slate-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between gap-2"><span className="text-sm font-medium truncate">{iv.title}</span><span className="text-[11px] border border-slate-200 px-2 py-0.5 rounded-full">{iv.status}</span></div>
+                    <div className="text-xs text-slate-600 mt-1 truncate">{iv.description||iv.plan||''}</div>
+                    <div className="text-[11px] text-slate-400 mt-1">{new Date(iv.created_at).toLocaleDateString()} · {iv.action_type}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+          <Card>
+            <SectionHeader title="Relevant experience" subtitle="Validated patterns for this segment" icon={Zap} />
+            {memory.length===0 ? <div className="text-xs text-slate-500">No validated memories for {customer.segment} yet.</div> : (
+              <div className="space-y-2">
+                {memory.slice(0,3).map((m:any)=>(
+                  <div key={m.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                    <div className="text-xs font-semibold">{m.pattern||m.risk_pattern||m.context_pattern}</div>
+                    <div className="text-xs text-slate-600 mt-1">Strategy: {m.recommended_strategy||m.recommended_intervention}</div>
+                    <div className="text-[11px] text-slate-500 mt-1">Confidence {(m.confidence*100).toFixed(0)}% · Sample {m.sample_size||m.success_count||1}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+          <Card>
+            <div className="text-xs font-semibold">Lifecycle</div>
+            <div className="mt-2 flex items-center gap-1 text-[11px] font-mono">
+              {['SENSE','THINK','ACT','MEASURE','LEARN'].map((s,i)=>(
+                <React.Fragment key={s}>
+                  <span className={`px-2 py-1 rounded-full border ${i===1 ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200'}`}>{s}</span>
+                  {i<4 && <ArrowRight className="w-3 h-3 text-slate-400"/>}
+                </React.Fragment>
+              ))}
+            </div>
+            <div className="text-xs text-slate-600 mt-2">You are in THINK → ACT. Approve to move to MEASURE.</div>
+          </Card>
+        </div>
       </div>
     </div>
   );
