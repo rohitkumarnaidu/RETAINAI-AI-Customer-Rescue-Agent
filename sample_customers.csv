@@ -1,0 +1,6 @@
+name,domain,segment,industry,plan,arr,mrr,csm_name,csm_email,health_score,risk_level,renewal_date,status
+Acme Test Co,acmetest.com,Enterprise,FinTech,Enterprise Tier,180000,15000,Alex Morgan,alex@retainai.io,42,CRITICAL,2026-09-15,ACTIVE
+Nimbus Labs,nimbuslabs.io,MidMarket,Software,Growth Tier,48000,4000,Sarah Chen,sarah@retainai.io,78,WATCH,2026-10-20,ACTIVE
+Horizon Healthcare,horizonhealth.com,Enterprise,Healthcare,Enterprise Tier,120000,10000,Alex Morgan,alex@retainai.io,65,WATCH,2026-11-01,ACTIVE
+Bright SMB,brightsmb.co,SMB,Education,Starter Tier,6000,500,Jamie Lee,jamie@retainai.io,92,HEALTHY,2026-08-30,ACTIVE
+Logistics Pro Demo,logisticspro.demo,Enterprise,Logistics,Enterprise Tier,95000,7916,Alex Morgan,alex@retainai.io,88,HEALTHY,2026-12-01,ACTIVE
