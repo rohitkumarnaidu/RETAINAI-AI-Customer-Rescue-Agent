@@ -118,28 +118,30 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
         </Card>
 
         <Card className="xl:col-span-2" padding="p-0">
-          <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold">Customer portfolio</h3>
-              <p className="text-xs text-slate-500">{filtered.length} of {customers.length} accounts</p>
-            </div>
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <div className="relative flex-1 md:w-56">
-                <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-slate-400" />
-                <input aria-label="Filter accounts or CSMs" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search account, domain, CSM" className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-slate-400" />
+          <div className="p-4 border-b border-slate-100 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Customer portfolio</h3>
+                <p className="text-xs text-slate-500">{filtered.length} of {customers.length} accounts</p>
               </div>
-              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-1">
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <div className="relative flex-1 min-w-0 sm:max-w-[320px]">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input aria-label="Filter accounts or CSMs" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search accounts, domain, CSM..." className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-200 placeholder:text-slate-400" />
+              </div>
+              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-1 shrink-0 self-start sm:self-auto">
                 {['ALL','CRITICAL','WATCH','HEALTHY'].map(l=>(
-                  <button key={l} onClick={()=>setRiskFilter(l)} className={`px-2.5 py-1 rounded-md text-xs font-medium ${riskFilter===l ? 'bg-slate-900 text-white':'text-slate-600 hover:bg-white'}`}>{l}</button>
+                  <button key={l} onClick={()=>setRiskFilter(l)} className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap ${riskFilter===l ? 'bg-slate-900 text-white':'text-slate-600 hover:bg-white'}`}>{l}</button>
                 ))}
               </div>
             </div>
           </div>
 
-          <div className="overflow-auto max-h-[420px]">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto overflow-y-auto max-h-[420px]">
+            <table className="w-full text-sm min-w-[640px]">
               <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-xs font-mono text-slate-500">
-                <tr><th className="text-left p-3 font-medium">Account</th><th className="text-left p-3 font-medium">Risk</th><th className="text-left p-3 font-medium">Health</th><th className="text-left p-3 font-medium">ARR</th><th className="text-left p-3 font-medium">CSM</th><th className="p-3"></th></tr>
+                <tr><th className="text-left p-3 font-medium whitespace-nowrap min-w-[160px]">Account</th><th className="text-left p-3 font-medium whitespace-nowrap w-[100px]">Risk</th><th className="text-left p-3 font-medium whitespace-nowrap w-[80px]">Health</th><th className="text-left p-3 font-medium whitespace-nowrap w-[90px]">ARR</th><th className="text-left p-3 font-medium whitespace-nowrap min-w-[130px]">CSM</th><th className="p-3 w-[80px]"></th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((c:any)=>{

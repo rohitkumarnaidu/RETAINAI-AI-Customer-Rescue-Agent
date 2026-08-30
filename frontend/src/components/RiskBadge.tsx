@@ -16,15 +16,16 @@ export const HealthRing: React.FC<{score:number; size?:number}> = ({score, size=
   const pct = Math.max(0,Math.min(100, score));
   const r=24, circ=2*Math.PI*r, off=circ - (pct/100)*circ;
   let color='#0F766E'; if(pct<50) color='#DC2626'; else if(pct<75) color='#D97706';
+  const isCompact = size <= 40;
   return (
-    <div className="relative" style={{width:size,height:size}}>
+    <div className="relative shrink-0" style={{width:size,height:size}}>
       <svg width={size} height={size} viewBox="0 0 56 56" className="-rotate-90">
         <circle cx="28" cy="28" r={r} stroke="#E2E8F0" strokeWidth="6" fill="none" />
         <circle cx="28" cy="28" r={r} stroke={color} strokeWidth="6" fill="none" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-        <span className="text-sm font-bold text-slate-900">{Math.round(pct)}</span>
-        <span className="text-[9px] text-slate-500 font-mono">HEALTH</span>
+        <span className={`${isCompact ? 'text-[11px]' : 'text-sm'} font-bold text-slate-900 leading-none`}>{Math.round(pct)}</span>
+        {!isCompact && <span className="text-[9px] text-slate-500 font-mono leading-none mt-0.5">HEALTH</span>}
       </div>
     </div>
   );

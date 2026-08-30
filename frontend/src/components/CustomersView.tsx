@@ -40,30 +40,32 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
   return (
     <div className="space-y-4">
       <Card>
-        <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center justify-between">
+        <div className="space-y-3">
           <div>
             <h2 className="text-lg font-semibold">Customers</h2>
-            <p className="text-xs text-slate-500">{filtered.length} of {customers.length} · Search, filter, sort — real backend data · Updated {new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{filtered.length} of {customers.length} · Search, filter, sort — real backend data · Updated {new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-            <div className="relative flex-1 lg:w-64">
-              <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-slate-400"/>
-              <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search account, domain, industry" className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm"/>
+          <div className="flex flex-col xl:flex-row gap-2 xl:items-center xl:justify-between">
+            <div className="relative flex-1 min-w-0 xl:max-w-[320px]">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
+              <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search accounts, domain, industry..." className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-200 placeholder:text-slate-400"/>
             </div>
-            <select value={seg} onChange={e=>setSeg(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-2 text-sm bg-white">
-              <option value="ALL">All segments</option>
-              {segs.map(s=><option key={s} value={s}>{s}</option>)}
-            </select>
-            <select value={risk} onChange={e=>setRisk(e.target.value)} className="border border-slate-200 rounded-lg px-2 py-2 text-sm bg-white">
-              <option value="ALL">All risk</option><option>CRITICAL</option><option>WATCH</option><option>HEALTHY</option><option>AT_RISK</option><option>HIGH_RISK</option>
-            </select>
-            <select value={sort} onChange={e=>setSort(e.target.value as any)} className="border border-slate-200 rounded-lg px-2 py-2 text-sm bg-white">
-              <option value="name">Sort: Name</option><option value="health">Sort: Health ↑</option><option value="arr">Sort: ARR ↓</option>
-            </select>
-            <button onClick={load} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-slate-50"><RefreshCw className="w-3.5 h-3.5" /> Refresh</button>
-            <button onClick={()=>setShowImport(v=>!v)} className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border ${showImport ? 'bg-slate-900 text-white border-slate-900' : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'}`}>
-              {showImport ? <X className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />} {showImport ? 'Close import' : 'Import CSV / Add customer'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={seg} onChange={e=>setSeg(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-slate-400 min-w-[130px]">
+                <option value="ALL">All segments</option>
+                {segs.map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+              <select value={risk} onChange={e=>setRisk(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-slate-400 min-w-[110px]">
+                <option value="ALL">All risk</option><option>CRITICAL</option><option>WATCH</option><option>HEALTHY</option><option>AT_RISK</option><option>HIGH_RISK</option>
+              </select>
+              <select value={sort} onChange={e=>setSort(e.target.value as any)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-slate-400 min-w-[130px]">
+                <option value="name">Sort: Name</option><option value="health">Sort: Health ↑</option><option value="arr">Sort: ARR ↓</option>
+              </select>
+              <button onClick={load} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-slate-50 whitespace-nowrap"><RefreshCw className="w-3.5 h-3.5" /> Refresh</button>
+              <button onClick={()=>setShowImport(v=>!v)} className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border whitespace-nowrap ${showImport ? 'bg-slate-900 text-white border-slate-900' : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'}`}>
+                {showImport ? <X className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />} {showImport ? 'Close import' : 'Import CSV / Add customer'}
+              </button>
+            </div>
           </div>
         </div>
         {showImport && (
@@ -75,21 +77,21 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
       </Card>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="overflow-auto max-h-[640px]">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto overflow-y-auto max-h-[640px]">
+          <table className="w-full text-sm min-w-[720px]">
             <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-xs font-mono text-slate-500">
-              <tr><th className="text-left p-3">Account</th><th className="text-left p-3">Segment</th><th className="text-left p-3">Health</th><th className="text-left p-3">Risk</th><th className="text-left p-3">ARR</th><th className="text-left p-3">Renewal</th><th className="p-3"></th></tr>
+              <tr><th className="text-left p-3 whitespace-nowrap min-w-[180px]">Account</th><th className="text-left p-3 whitespace-nowrap min-w-[140px]">Segment</th><th className="text-left p-3 whitespace-nowrap w-[84px]">Health</th><th className="text-left p-3 whitespace-nowrap w-[110px]">Risk</th><th className="text-left p-3 whitespace-nowrap w-[90px]">ARR</th><th className="text-left p-3 whitespace-nowrap w-[130px]">Renewal</th><th className="p-3 w-[90px]"></th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {paged.map((c:any)=>(
                 <tr key={c.id} onClick={()=>onSelectCustomer(c.id)} className="hover:bg-slate-50 cursor-pointer">
-                  <td className="p-3"><div className="font-medium">{c.name}</div><div className="text-xs text-slate-500 font-mono">{c.domain} · {c.industry}</div></td>
-                  <td className="p-3 text-xs">{c.segment}<div className="text-[11px] text-slate-400">{c.plan}</div></td>
-                  <td className="p-3"><div className="flex items-center gap-2"><HealthRing score={c.health_score} size={36}/><span className="text-sm font-semibold">{Math.round(c.health_score)}</span></div></td>
-                  <td className="p-3"><RiskBadge level={c.risk_level} size="sm"/></td>
-                  <td className="p-3 font-mono text-xs">{fmtARR(c.arr)}</td>
-                  <td className="p-3 text-xs">{fmtDate(c.renewal_date)}<div className="text-[11px] text-slate-400">{c.lifecycle_stage}</div></td>
-                  <td className="p-3 text-right"><span className="inline-flex items-center gap-1 border border-slate-200 rounded-lg px-2.5 py-1 text-xs bg-white">Open <ArrowUpRight className="w-3 h-3"/></span></td>
+                  <td className="p-3 align-middle"><div className="font-medium leading-tight truncate max-w-[180px]">{c.name}</div><div className="text-xs text-slate-500 font-mono leading-tight truncate max-w-[180px]">{c.domain} · {c.industry}</div></td>
+                  <td className="p-3 align-middle text-xs whitespace-nowrap">{c.segment}<div className="text-[11px] text-slate-400 truncate max-w-[140px]">{c.plan}</div></td>
+                  <td className="p-3 align-middle"><HealthRing score={c.health_score} size={32}/></td>
+                  <td className="p-3 align-middle"><RiskBadge level={c.risk_level} size="sm"/></td>
+                  <td className="p-3 align-middle font-mono text-xs whitespace-nowrap">{fmtARR(c.arr)}</td>
+                  <td className="p-3 align-middle text-xs whitespace-nowrap">{fmtDate(c.renewal_date)}<div className="text-[11px] text-slate-400">{c.lifecycle_stage}</div></td>
+                  <td className="p-3 align-middle text-right"><span className="inline-flex items-center gap-1 border border-slate-200 rounded-lg px-2.5 py-1 text-xs bg-white whitespace-nowrap">Open <ArrowUpRight className="w-3 h-3"/></span></td>
                 </tr>
               ))}
               {filtered.length===0 && <tr><td colSpan={7} className="p-8 text-center text-sm text-slate-500">No results — adjust filters.</td></tr>}
