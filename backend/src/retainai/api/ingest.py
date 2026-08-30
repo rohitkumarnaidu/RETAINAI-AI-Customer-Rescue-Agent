@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from retainai.db.session import get_db
-from retainai.auth.auth import get_current_user
+from retainai.auth.auth import get_current_user, require_tenant
 from retainai.db.models import Customer, RiskLevel
 from retainai.services.event_ingestion_service import EventIngestionService
 from retainai.config import settings
@@ -188,7 +188,6 @@ async def ingest_batch(
             health_score=round(float(health_score), 1),
             risk_level=risk_enum,
             is_false_positive_candidate=str(raw.get("is_false_positive_candidate", "")).lower() in ("1", "true", "yes"),
-            metadata_json=extra_ingest if extra_ingest else None,
         )
         db.add(customer)
         try:
@@ -285,8 +284,8 @@ async def ingest_webhook(
         cust = res.scalar_one_or_none()
         if not cust:
             raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
-        # Enforce tenant isolation if customer has tenant_id
-        if getattr(cust, "tenant_id", None) and cust.tenant_id != tenant_id and not settings.DEMO_MODE:
+        # Enforce tenant isolation if customer has tenant_id (always, not only when not DEMO_MODE)
+        if getattr(cust, "tenant_id", None) and cust.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail="Customer belongs to another tenant")
     except HTTPException:
         raise
@@ -428,7 +427,7 @@ async def bulk_events(
         cust = res.scalar_one_or_none()
         if not cust:
             raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
-        if getattr(cust, "tenant_id", None) and cust.tenant_id != tenant_id and not settings.DEMO_MODE:
+        if getattr(cust, "tenant_id", None) and cust.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail="Customer belongs to another tenant")
     except HTTPException:
         raise
@@ -510,8 +509,15 @@ async def seed_sample(
     db: AsyncSession = Depends(get_db),
     user: Dict[str, Any] = Depends(get_current_user),
     request: Request = None,  # type: ignore
+    tenant_id: str = Depends(require_tenant),
 ):
-    tenant_id = _tenant_id_from_user(user, request)
+    # tenant_id from require_tenant is primary; legacy helper as fallback
+    try:
+        _resolved = _tenant_id_from_user(user, request)
+        if _resolved:
+            tenant_id = _resolved
+    except Exception:
+        pass
 
     # Ensure tenant exists
     from retainai.db.models import Tenant, OrgSettings, UsageEvent, SupportTicket, CustomerFeedback

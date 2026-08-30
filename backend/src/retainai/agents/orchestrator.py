@@ -110,8 +110,11 @@ class AgentOrchestrator:
             return True  # allow unknown for backward compat
         allowed = VALID_TRANSITIONS.get(cur_enum, [])
         if nxt_enum not in allowed and cur_enum != nxt_enum:
-            # Log but allow - non-strict for now to preserve flexibility
-            logger.warning(f"State transition {current} -> {next_state} not in strict allowlist")
+            msg = f"State transition {current} -> {next_state} not in strict allowlist"
+            if getattr(__import__("retainai.config.settings", fromlist=["settings"]).settings, "APP_ENV", "") == "production":
+                logger.error(msg)
+                raise ValueError(msg)
+            logger.warning(msg)
 
     async def _transition_state(self, agent_run: AgentRun, new_state: str, tool_name: Optional[str] = None, latency_ms: Optional[int] = None, error: Optional[str] = None):
         """Log explicit state transition with audit trail and AgentStep record."""
@@ -173,6 +176,23 @@ class AgentOrchestrator:
         invalid = [eid for eid in claimed_ids if eid not in real_ids]
         valid = [eid for eid in claimed_ids if eid in real_ids]
         return {"valid": valid, "invalid": invalid, "all_real": list(real_ids)}
+
+    def _validate_evidence_ids_with_signals(self, claimed_ids: List[str], evidence: Dict[str, Any], signals: List[Any]) -> Dict[str, Any]:
+        """Extended validation including signal evidence_ids."""
+        base = self._validate_evidence_ids(claimed_ids, evidence)
+        if signals:
+            signal_ids = set()
+            for s in signals:
+                if isinstance(s, dict):
+                    for eid in s.get("evidence_ids", []) or []:
+                        signal_ids.add(eid)
+                    if s.get("id"):
+                        signal_ids.add(s.get("id"))
+            extra_valid = [eid for eid in base["invalid"] if eid in signal_ids]
+            if extra_valid:
+                base["valid"].extend(extra_valid)
+                base["invalid"] = [eid for eid in base["invalid"] if eid not in signal_ids]
+        return base
 
     async def run_full_rescue_workflow(self, customer_id: str) -> Dict[str, Any]:
         """Executes full agentic investigation and next-best action generation with bounded loop."""

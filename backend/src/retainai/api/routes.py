@@ -579,7 +579,8 @@ async def resolve_evidence(evidence_id: str, db: AsyncSession = Depends(get_db),
     """Evidence resolver per S8: map evidence IDs back to real records."""
     # Check across tables: UsageEvent, SupportTicket, CustomerFeedback, AccountEvent, SystemEventLog, Evidence
     from retainai.db.models import UsageEvent, SupportTicket, CustomerFeedback, AccountEvent
-    # Search each table by id
+    # Search each table by id — tenant-checked
+    from retainai.db.models import Customer as _CustCheck
     for model, source_type in [
         (UsageEvent, "USAGE_EVENT"),
         (SupportTicket, "SUPPORT_TICKET"),
@@ -589,6 +590,15 @@ async def resolve_evidence(evidence_id: str, db: AsyncSession = Depends(get_db),
         res = await db.execute(select(model).where(model.id == evidence_id))
         obj = res.scalar_one_or_none()
         if obj:
+            obj_tenant = getattr(obj, "tenant_id", None)
+            if obj_tenant is not None and obj_tenant != tenant_id:
+                continue
+            cust_id = getattr(obj, "customer_id", None)
+            if cust_id:
+                chk = await db.execute(select(_CustCheck.tenant_id).where(_CustCheck.id == cust_id))
+                cust_tid = chk.scalar_one_or_none()
+                if cust_tid is not None and cust_tid != tenant_id:
+                    continue
             return {
                 "evidence_id": evidence_id,
                 "source_type": source_type,
@@ -601,6 +611,8 @@ async def resolve_evidence(evidence_id: str, db: AsyncSession = Depends(get_db),
     res = await db.execute(select(EvModel).where(EvModel.id == evidence_id))
     ev = res.scalar_one_or_none()
     if ev:
+        if getattr(ev, "tenant_id", None) is not None and ev.tenant_id != tenant_id:
+            raise HTTPException(status_code=404, detail=f"Evidence {evidence_id} not found")
         return {"evidence_id": ev.id, "source_type": ev.source_type, "customer_id": ev.customer_id, "timestamp": ev.timestamp.isoformat(), "summary": ev.summary}
     raise HTTPException(status_code=404, detail=f"Evidence {evidence_id} not found")
 
@@ -613,6 +625,8 @@ async def get_agent_run(run_id: str, db: AsyncSession = Depends(get_db), user: d
     res = await db.execute(select(AgentRun).where(AgentRun.id == run_id))
     run = res.scalar_one_or_none()
     if not run:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    if getattr(run, "tenant_id", None) is not None and run.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Agent run not found")
     steps_res = await db.execute(select(AgentStep).where(AgentStep.run_id == run_id).order_by(AgentStep.timestamp.asc()))
     steps = list(steps_res.scalars().all())
@@ -671,10 +685,10 @@ async def get_interventions(customer_id: str, db: AsyncSession = Depends(get_db)
 async def create_intervention(req: InterventionCreateRequest, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
     tenant_id: str = Depends(require_tenant)):
     """Create new intervention proposed plan — validates investigation_id FK (P0-04)."""
-    # Validate investigation_id exists to avoid FK IntegrityError
+    # Validate investigation_id exists to avoid FK IntegrityError (tenant-checked)
     if req.investigation_id:
         from retainai.db.models import InvestigationReport
-        res = await db.execute(select(InvestigationReport).where(InvestigationReport.id == req.investigation_id))
+        res = await db.execute(select(InvestigationReport).where(InvestigationReport.id == req.investigation_id).where(InvestigationReport.tenant_id == tenant_id))
         if not res.scalar_one_or_none():
             raise HTTPException(status_code=400, detail=f"investigation_id {req.investigation_id} not found")
     service = InterventionService(db)
@@ -851,7 +865,7 @@ async def list_all_interventions(
 ):
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
-    query = select(Intervention)
+    query = select(Intervention).where(Intervention.tenant_id == tenant_id)
     if status:
         query = query.where(Intervention.status == status)  # type: ignore
     query = query.order_by(Intervention.created_at.desc()).limit(limit).offset(offset)
@@ -892,7 +906,7 @@ async def list_all_outcomes(
 ):
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
-    res = await db.execute(select(InterventionOutcome).order_by(InterventionOutcome.created_at.desc()).limit(limit).offset(offset))
+    res = await db.execute(select(InterventionOutcome).where(InterventionOutcome.tenant_id == tenant_id).order_by(InterventionOutcome.created_at.desc()).limit(limit).offset(offset))
     return list(res.scalars().all())
 
 

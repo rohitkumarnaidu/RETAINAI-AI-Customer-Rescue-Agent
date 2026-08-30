@@ -35,10 +35,10 @@ async def trigger_agent_investigation_alias(customer_id: str, db: AsyncSession =
 @router.get("/runs/{customer_id}")
 async def list_agent_runs(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user), tenant_id: str = Depends(require_tenant)):
     """Retrieves audit run history for an agent workflow on a customer."""
-    # Tenant filter
+    # Tenant filter — strict (no OR NULL leak)
     q = select(AgentRun).where(AgentRun.customer_id == customer_id)
     if tenant_id:
-        q = q.where((AgentRun.tenant_id == tenant_id) | (AgentRun.tenant_id.is_(None)))
+        q = q.where(AgentRun.tenant_id == tenant_id)
     q = q.order_by(AgentRun.started_at.desc())
     res = await db.execute(q)
     runs = res.scalars().all()
