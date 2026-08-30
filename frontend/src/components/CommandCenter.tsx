@@ -1,15 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getPortfolio } from '../services/api';
 import { RiskBadge, HealthRing } from './RiskBadge';
 import { Card, SkeletonCard, ErrorState, EmptyState } from './ui';
-import { ArrowUpRight, TrendingDown, ShieldAlert, Activity, Clock, Search, Filter, Upload, FileSpreadsheet } from 'lucide-react';
+import { TrendingDown, ShieldAlert, Activity, Clock, ArrowUpRight, FileSpreadsheet, Upload } from 'lucide-react';
 
 export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({onSelectCustomer})=>{
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [q, setQ] = useState('');
-  const [riskFilter, setRiskFilter] = useState<string>('ALL');
 
   const load = async()=>{
     try{ setLoading(true); setError(null); const p=await getPortfolio(); setData(p); }
@@ -17,46 +15,8 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
     finally{ setLoading(false); }
   };
   useEffect(()=>{ load(); },[]);
-  useEffect(()=>{
-    let mounted = true;
-    const handler = () => { if(mounted) load(); };
-    try{
-      import('../services/api').then(m=>{
-        const emitter = (m as any).refreshEmitter as EventTarget | undefined;
-        if(emitter && emitter.addEventListener){
-          emitter.addEventListener('portfolio', handler);
-          emitter.addEventListener('customers', handler);
-        }
-      });
-    } catch{}
-    return ()=>{
-      mounted = false;
-      try{
-        import('../services/api').then(m=>{
-          const emitter = (m as any).refreshEmitter as EventTarget | undefined;
-          if(emitter && emitter.removeEventListener){
-            emitter.removeEventListener('portfolio', handler);
-            emitter.removeEventListener('customers', handler);
-          }
-        });
-      } catch{}
-    };
-  },[]);
 
   const customers: any[] = data?.customers || [];
-  const metrics = data?.metrics || {};
-
-  const filtered = useMemo(()=>{
-    return customers.filter((c:any)=>{
-      const matchesQ = !q || c.name.toLowerCase().includes(q.toLowerCase()) || c.domain.toLowerCase().includes(q.toLowerCase()) || c.csm_name?.toLowerCase().includes(q.toLowerCase());
-      const matchesRisk = riskFilter==='ALL' || (c.risk_level||'HEALTHY')===riskFilter;
-      return matchesQ && matchesRisk;
-    }).sort((a:any,b:any)=>{
-      const order:any = {CRITICAL:0, HIGH_RISK:1, AT_RISK:2, WATCH:3, STABLE:4, HEALTHY:5};
-      return (order[a.risk_level]??9) - (order[b.risk_level]??9);
-    });
-  },[customers,q,riskFilter]);
-
   const critical = customers.filter((c:any)=>['CRITICAL','HIGH_RISK'].includes(c.risk_level));
   const watch = customers.filter((c:any)=>['WATCH','AT_RISK'].includes(c.risk_level));
   const healthy = customers.filter((c:any)=>c.risk_level==='HEALTHY');
@@ -124,99 +84,42 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Card className="xl:col-span-1" padding="p-0">
-          <div className="p-5 border-b border-slate-100">
-            <h3 className="text-sm font-semibold">Needs attention</h3>
-            <p className="text-xs text-slate-500">Highest risk first — sorted by risk level</p>
-          </div>
-          <div className="divide-y divide-slate-100 max-h-[420px] overflow-auto">
-            {critical.slice(0,8).map((c:any)=>(
-              <button key={c.id} onClick={()=>onSelectCustomer(c.id)} className="w-full text-left p-4 hover:bg-slate-50 flex items-center gap-3">
-                <HealthRing score={c.health_score} size={44} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{c.name}</div>
-                  <div className="text-xs text-slate-500 truncate">{c.domain} · {c.segment}</div>
-                </div>
-                <RiskBadge level={c.risk_level} size="sm" />
-              </button>
-            ))}
-            {critical.length===0 && <div className="p-6 text-xs text-slate-500 text-center">No critical accounts — watchlist below</div>}
-            {critical.length===0 && watch.slice(0,6).map((c:any)=>(
-              <button key={c.id} onClick={()=>onSelectCustomer(c.id)} className="w-full text-left p-4 hover:bg-slate-50 flex items-center gap-3">
-                <HealthRing score={c.health_score} size={44} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{c.name}</div>
-                  <div className="text-xs text-slate-500 truncate">{c.segment} · {c.csm_name}</div>
-                </div>
-                <RiskBadge level={c.risk_level} size="sm" />
-              </button>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="xl:col-span-2" padding="p-0">
-          <div className="p-4 border-b border-slate-100 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold">Customer portfolio</h3>
-                <p className="text-xs text-slate-500">{filtered.length} of {customers.length} accounts</p>
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-              <div className="relative flex-1 min-w-0 sm:max-w-[320px]">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <input aria-label="Filter accounts or CSMs" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search accounts, domain, CSM..." className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-200 placeholder:text-slate-400" />
-              </div>
-              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-1 shrink-0 self-start sm:self-auto">
-                {['ALL','CRITICAL','WATCH','HEALTHY'].map(l=>(
-                  <button key={l} onClick={()=>setRiskFilter(l)} className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap ${riskFilter===l ? 'bg-slate-900 text-white':'text-slate-600 hover:bg-white'}`}>{l}</button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto overflow-y-auto max-h-[420px]">
-            <table className="w-full text-sm min-w-[640px]">
-              <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-xs font-mono text-slate-500">
-                <tr><th className="text-left p-3 font-medium whitespace-nowrap min-w-[160px]">Account</th><th className="text-left p-3 font-medium whitespace-nowrap w-[100px]">Risk</th><th className="text-left p-3 font-medium whitespace-nowrap w-[80px]">Health</th><th className="text-left p-3 font-medium whitespace-nowrap w-[90px]">ARR</th><th className="text-left p-3 font-medium whitespace-nowrap min-w-[130px]">CSM</th><th className="p-3 w-[80px]"></th></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((c:any)=>{
-                  return (
-                    <tr key={c.id} onClick={()=>onSelectCustomer(c.id)} role="button" tabIndex={0} onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); onSelectCustomer(c.id); } }} className={`hover:bg-slate-50 cursor-pointer`}>
-                      <td className="p-3">
-                        <div className="font-medium flex items-center gap-1.5">{c.name}</div>
-                        <div className="text-xs text-slate-500 font-mono">{c.domain} · {c.segment}</div>
-                      </td>
-                      <td className="p-3"><RiskBadge level={c.risk_level||'HEALTHY'} size="sm" /></td>
-                      <td className="p-3"><span className={`text-sm font-semibold ${c.health_score<50?'text-red-600': c.health_score<75?'text-amber-600':'text-teal-700'}`}>{Math.round(c.health_score)}</span><span className="text-xs text-slate-400">/100</span></td>
-                      <td className="p-3 font-mono text-xs">${(c.arr||0).toLocaleString()}</td>
-                      <td className="p-3 text-xs text-slate-600">{c.csm_name}<div className="text-[11px] text-slate-400">{c.industry}</div></td>
-                      <td className="p-3 text-right"><span className="inline-flex items-center gap-1 text-xs border border-slate-200 bg-white px-2.5 py-1 rounded-lg">360 <ArrowUpRight className="w-3 h-3"/></span></td>
-                    </tr>
-                  );
-                })}
-                {filtered.length===0 && <tr><td colSpan={6} className="p-8 text-center"><div className="text-sm text-slate-500">No accounts match filters</div><button onClick={()=>{setQ('');setRiskFilter('ALL');}} className="mt-2 text-xs border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50">Clear filters</button></td></tr>}
-              </tbody>
-            </table>
-          </div>
-          <div className="p-3 border-t border-slate-100 text-xs text-slate-500 flex items-center gap-2"><Filter className="w-3.5 h-3.5"/> Risk distribution: {Object.entries(metrics.risk_distribution||{}).map(([k,v])=>`${k} ${v}`).join(' · ') || '—'}</div>
-        </Card>
-      </div>
-
-      {hero ? (
-        <div className="bg-[#0F172A] text-white rounded-xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <Card padding="p-0">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-2">
           <div>
-            <div className="text-xs font-mono tracking-wide text-slate-400">FEATURED · Highest risk</div>
-            <div className="text-lg font-semibold mt-1">{hero.name} — ${hero.arr.toLocaleString()} ARR</div>
-            <div className="text-sm text-slate-300 mt-1">{hero.domain} · {hero.segment} · CSM {hero.csm_name} · Health {Math.round(hero.health_score)}/100 · {hero.risk_level}</div>
+            <h3 className="text-sm font-semibold">Needs attention</h3>
+            <p className="text-xs text-slate-500">Highest risk first — sorted by risk level · Full portfolio in <b>Customers</b>, visuals in <b>Analytics</b></p>
           </div>
-          <button onClick={()=>onSelectCustomer(hero.id)} className="bg-white text-slate-900 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-100">Launch {hero.name.split(' ')[0]} 360 Rescue →</button>
+          <button onClick={load} className="text-xs border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"><Clock className="w-3 h-3" />Refresh</button>
         </div>
-      ) : customers.length===0 ? (
-        <EmptyState title="No customers yet" description="Import CSV or add manually to see portfolio, KPIs, and risk distribution. Go to Customers → Import CSV / Add customer." action={<button onClick={load} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm">Refresh</button>} />
-      ) : null}
+        <div className="divide-y divide-slate-100 max-h-[420px] overflow-auto">
+          {critical.slice(0,8).map((c:any)=>(
+            <button key={c.id} onClick={()=>onSelectCustomer(c.id)} className="w-full text-left p-4 hover:bg-slate-50 flex items-center gap-3">
+              <HealthRing score={c.health_score} size={44} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{c.name}</div>
+                <div className="text-xs text-slate-500 truncate">{c.domain} · {c.segment} · {c.csm_name}</div>
+              </div>
+              <RiskBadge level={c.risk_level} size="sm" />
+            </button>
+          ))}
+          {critical.length===0 && watch.slice(0,8).map((c:any)=>(
+            <button key={c.id} onClick={()=>onSelectCustomer(c.id)} className="w-full text-left p-4 hover:bg-slate-50 flex items-center gap-3">
+              <HealthRing score={c.health_score} size={44} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{c.name}</div>
+                <div className="text-xs text-slate-500 truncate">{c.segment} · {c.csm_name} · Health {Math.round(c.health_score)}</div>
+              </div>
+              <RiskBadge level={c.risk_level} size="sm" />
+            </button>
+          ))}
+          {critical.length===0 && watch.length===0 && <div className="p-6 text-xs text-slate-500 text-center">All clear — no watch/critical. See <b>Analytics</b> for health histogram.</div>}
+        </div>
+      </Card>
+
+      {customers.length===0 && (
+        <EmptyState title="No customers yet" description="Import CSV or add manually to see portfolio, KPIs, and risk distribution. Go to Onboarding → Import or Customers → Import." action={<button onClick={load} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm">Refresh</button>} />
+      )}
     </div>
   );
 };

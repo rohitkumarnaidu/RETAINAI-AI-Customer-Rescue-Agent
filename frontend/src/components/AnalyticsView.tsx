@@ -16,29 +16,39 @@ const Bar: React.FC<{ label: string; value: number; max: number; color?: string 
 
 const Donut: React.FC<{ segments: { label: string; value: number; color: string }[] }> = ({ segments }) => {
   const total = segments.reduce((s, x) => s + x.value, 0) || 1;
+  // Build conic-gradient with cumulative stops — fixes color mixing/overlap bug
+  let acc = 0;
+  const gradient = segments
+    .map(s => {
+      const start = (acc / total) * 100;
+      acc += s.value;
+      const end = (acc / total) * 100;
+      return `${s.color} ${start}% ${end}%`;
+    })
+    .join(', ');
   return (
-    <div className="flex items-center gap-4">
-      <div className="relative w-24 h-24">
+    <div className="flex items-center gap-4 min-w-0">
+      <div className="relative w-24 h-24 shrink-0">
         <div className="absolute inset-0 rounded-full border-[8px] border-slate-100" />
         <div
           className="absolute inset-0 rounded-full"
           style={{
-            background: `conic-gradient(${segments.map(s => `${s.color} ${(s.value / total) * 100}%`).join(', ')})`,
+            background: `conic-gradient(${gradient})`,
             mask: 'radial-gradient(circle at center, transparent 28px, black 29px)',
             WebkitMask: 'radial-gradient(circle at center, transparent 28px, black 29px)',
           }}
         />
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-lg font-bold">{total}</span>
-          <span className="text-[10px] font-mono text-slate-500">accounts</span>
+          <span className="text-lg font-bold leading-none">{total}</span>
+          <span className="text-[10px] font-mono text-slate-500 leading-none mt-0.5">accounts</span>
         </div>
       </div>
-      <div className="flex-1 space-y-1">
+      <div className="flex-1 min-w-0 space-y-1.5">
         {segments.map(s => (
-          <div key={s.label} className="flex items-center gap-2 text-xs">
-            <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
-            <span className="flex-1 text-slate-600">{s.label}</span>
-            <span className="font-mono text-slate-900">{s.value}</span>
+          <div key={s.label} className="flex items-center gap-2 text-xs min-w-0">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
+            <span className="flex-1 truncate text-slate-600" title={s.label}>{s.label}</span>
+            <span className="font-mono text-slate-900 whitespace-nowrap">{s.value}</span>
           </div>
         ))}
       </div>
@@ -77,12 +87,15 @@ export const AnalyticsView: React.FC = () => {
   const totalArr = customers.reduce((s: number, c: any) => s + (c.arr || 0), 0);
   const atRiskArr = customers.filter((c: any) => ['AT_RISK', 'HIGH_RISK', 'CRITICAL'].includes(c.risk_level)).reduce((s: number, c: any) => s + (c.arr || 0), 0);
 
-  // Health histogram (0-100 buckets)
+  // Health histogram (0-100 buckets) — uses Math.round health for stability
   const buckets = [0, 20, 40, 60, 80, 100];
   const healthHist = buckets.slice(1).map((upper, idx) => {
     const lower = buckets[idx];
     const label = `${lower}-${upper}`;
-    const count = customers.filter((c: any) => c.health_score >= lower && c.health_score < (upper === 100 ? 101 : upper)).length;
+    const count = customers.filter((c: any) => {
+      const h = Math.round(Number(c.health_score ?? 0));
+      return h >= lower && h < (upper === 100 ? 101 : upper);
+    }).length;
     return { label, count };
   });
   const maxHist = Math.max(1, ...healthHist.map(h => h.count));
@@ -118,24 +131,24 @@ export const AnalyticsView: React.FC = () => {
       {/* KPI row — correct place for analytics, not crammed in Command Center */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <div className="text-xs font-mono text-slate-500 flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5" /> TOTAL ARR</div>
-          <div className="text-2xl font-semibold mt-1">${(totalArr / 1000).toFixed(0)}k</div>
-          <div className="text-xs text-slate-500 mt-1">{total} accounts · avg ${(total ? totalArr / total : 0).toFixed(0).toLocaleString()} ARR</div>
+          <div className="text-xs font-mono text-slate-500 flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5 shrink-0" /> TOTAL ARR</div>
+          <div className="text-2xl font-semibold mt-1 tracking-tight">${(totalArr / 1000).toFixed(0)}k</div>
+          <div className="text-xs text-slate-500 mt-1 leading-tight truncate" title={`${total} accounts`}>{total} accounts · avg ${(total ? totalArr / total : 0).toFixed(0).toLocaleString()} ARR</div>
         </Card>
         <Card>
-          <div className="text-xs font-mono text-slate-500 flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-red-500" /> ARR AT RISK</div>
-          <div className="text-2xl font-semibold mt-1 text-red-600">${(atRiskArr / 1000).toFixed(0)}k</div>
-          <div className="text-xs text-slate-500 mt-1">{totalArr ? ((atRiskArr / totalArr) * 100).toFixed(1) : 0}% of portfolio · {atRisk} accounts</div>
+          <div className="text-xs font-mono text-slate-500 flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-red-500 shrink-0" /> ARR AT RISK</div>
+          <div className="text-2xl font-semibold mt-1 text-red-600 tracking-tight">${(atRiskArr / 1000).toFixed(0)}k</div>
+          <div className="text-xs text-slate-500 mt-1 leading-tight">{totalArr ? ((atRiskArr / totalArr) * 100).toFixed(1) : 0}% of portfolio · {atRisk} accounts</div>
         </Card>
         <Card>
-          <div className="text-xs font-mono text-slate-500 flex items-center gap-1.5"><Shield className="w-3.5 h-3.5" /> HEALTH AVG</div>
+          <div className="text-xs font-mono text-slate-500 flex items-center gap-1.5"><Shield className="w-3.5 h-3.5 shrink-0" /> HEALTH AVG</div>
           <div className="text-2xl font-semibold mt-1">{total ? Math.round(customers.reduce((s: number, c: any) => s + (c.health_score || 0), 0) / total) : 0}<span className="text-sm text-slate-400">/100</span></div>
-          <div className="text-xs text-slate-500 mt-1">{riskDist['HEALTHY'] || 0} healthy · {riskDist['CRITICAL'] || 0} critical</div>
+          <div className="text-xs text-slate-500 mt-1 leading-tight">{riskDist['HEALTHY'] || 0} healthy · {riskDist['CRITICAL'] || 0} critical</div>
         </Card>
         <Card>
-          <div className="text-xs font-mono text-slate-500 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> SIGNALS</div>
+          <div className="text-xs font-mono text-slate-500 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5 shrink-0" /> SIGNALS</div>
           <div className="text-2xl font-semibold mt-1">{obs?.tool_calls?.total ?? '—'}</div>
-          <div className="text-xs text-slate-500 mt-1">Agent tool calls · {obs?.agent_runs?.total ?? 0} runs</div>
+          <div className="text-xs text-slate-500 mt-1 leading-tight">Agent tool calls · {obs?.agent_runs?.total ?? 0} runs</div>
         </Card>
       </div>
 
@@ -175,10 +188,10 @@ export const AnalyticsView: React.FC = () => {
           <p className="text-xs text-slate-500 mt-1">Top 5 accounts by ARR — focus retention where $ is</p>
           <div className="mt-3 space-y-2">
             {customers.slice().sort((a: any, b: any) => (b.arr || 0) - (a.arr || 0)).slice(0, 5).map((c: any) => (
-              <div key={c.id} className="flex items-center gap-2 text-xs">
-                <span className="flex-1 truncate font-medium">{c.name}</span>
-                <span className="font-mono text-slate-600">${(c.arr || 0).toLocaleString()}</span>
-                <span className={`text-[11px] px-1.5 py-0.5 rounded-full border ${c.risk_level === 'CRITICAL' ? 'bg-red-50 border-red-200 text-red-700' : c.risk_level === 'HEALTHY' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200'}`}>{c.risk_level}</span>
+              <div key={c.id} className="flex items-center gap-2 text-xs min-w-0">
+                <span className="flex-1 truncate font-medium min-w-0" title={c.name}>{c.name}</span>
+                <span className="font-mono text-slate-600 whitespace-nowrap shrink-0">${Math.round(c.arr || 0).toLocaleString()}</span>
+                <span className={`text-[11px] px-1.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${c.risk_level === 'CRITICAL' ? 'bg-red-50 border-red-200 text-red-700' : c.risk_level === 'HEALTHY' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200'}`}>{c.risk_level}</span>
               </div>
             ))}
             {customers.length === 0 && <div className="text-xs text-slate-500">No customers — import to see concentration</div>}

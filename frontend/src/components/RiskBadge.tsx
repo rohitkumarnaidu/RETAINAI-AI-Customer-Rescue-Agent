@@ -8,8 +8,8 @@ export const RiskBadge: React.FC<{level:string; size?:'sm'|'md'|'lg'; showDot?:b
   if(['CRITICAL','HIGH_RISK','HIGH'].includes(u)){ cls='bg-red-50 text-red-700 border-red-200'; dot='bg-red-500'; }
   else if(['WATCH','AT_RISK','MEDIUM'].includes(u)){ cls='bg-amber-50 text-amber-700 border-amber-200'; dot='bg-amber-500'; }
   else if(['STABLE','NEUTRAL'].includes(u)){ cls='bg-slate-50 text-slate-700 border-slate-200'; dot='bg-slate-400'; }
-  const sz:any = {sm:'text-[11px] px-2 py-0.5', md:'text-xs px-2.5 py-1', lg:'text-sm px-3 py-1'}[size];
-  return <span className={`inline-flex items-center gap-1.5 rounded-full border font-mono tracking-wide font-medium ${cls} ${sz}`}>{showDot && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}{u.replace('_',' ')}</span>;
+  const sz:any = {sm:'text-xs px-2 py-1', md:'text-xs px-2.5 py-1', lg:'text-sm px-3 py-1'}[size];
+  return <span className={`inline-flex items-center gap-1.5 rounded-full border font-mono tracking-wide font-medium whitespace-nowrap shrink-0 leading-none ${cls} ${sz}`}>{showDot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />}{u.split('_').join(' ')}</span>;
 };
 
 export const HealthRing: React.FC<{score:number; size?:number}> = ({score, size=56})=>{

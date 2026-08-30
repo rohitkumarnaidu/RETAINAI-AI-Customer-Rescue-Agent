@@ -9,12 +9,13 @@ import { AuditView } from './components/AuditView';
 import { Onboarding } from './components/Onboarding';
 import { SettingsView } from './components/SettingsView';
 import { AnalyticsView } from './components/AnalyticsView';
+import { DataHubView } from './components/DataHubView';
 import { LoginPage } from './pages/Login';
 import { useAuth } from './context/AuthContext';
 import { resetDemo, getCustomers } from './services/api';
-import { LayoutDashboard, Users, UserCircle2, SearchCode, ClipboardList, GraduationCap, ScrollText, Shield, RefreshCw, Menu, X, Upload, Settings, LogOut, LogIn, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Users, UserCircle2, SearchCode, ClipboardList, GraduationCap, ScrollText, Shield, RefreshCw, Menu, X, Upload, Settings, LogOut, LogIn, BarChart3, Database } from 'lucide-react';
 
-type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit'|'onboarding'|'settings'|'analytics';
+type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit'|'onboarding'|'settings'|'analytics'|'datahub';
 
 export function App() {
   const { user, tenantId, logout, isAuthenticated } = useAuth();
@@ -90,7 +91,7 @@ export function App() {
     } finally { setResetting(false); }
   };
 
-  // Simplified, ordered by workflow: Setup → Workspace (SENSE) → Analytics (MEASURE) → Intelligence (THINK/ACT/LEARN) → System
+  // Simplified, ordered by workflow: Setup → Workspace (SENSE) → Data (separate + common) → Analytics (MEASURE) → Intelligence → System
   const navSections: {title:string, items:{id:Tab,label:string,icon:any}[]}[] = [
     {title:'START', items:[{id:'onboarding', label:'Onboarding', icon:Users}]},
     {title:'WORKSPACE', items:[
@@ -98,6 +99,7 @@ export function App() {
       {id:'customers', label:'Customers', icon:Users},
       {id:'customer360', label:'Customer 360', icon:UserCircle2},
     ]},
+    {title:'DATA', items:[{id:'datahub', label:'Data Hub', icon:Database}]},
     {title:'ANALYTICS', items:[{id:'analytics', label:'Analytics', icon:BarChart3}]},
     {title:'INTELLIGENCE', items:[
       {id:'investigations', label:'Investigations', icon:SearchCode},
@@ -137,50 +139,50 @@ export function App() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 h-[56px] flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button onClick={()=>setMobileNavOpen(v=>!v)} className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-slate-100" aria-label="Toggle navigation">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/90 border-b border-slate-200">
+        <div className="max-w-[1440px] mx-auto px-3 sm:px-6 h-[56px] flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button onClick={()=>setMobileNavOpen(v=>!v)} className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-slate-100 shrink-0" aria-label="Toggle navigation">
               {mobileNavOpen ? <X className="w-5 h-5"/> : <Menu className="w-5 h-5"/>}
             </button>
-            <div className="w-8 h-8 rounded-lg bg-[#0F172A] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-[#0F172A] flex items-center justify-center shrink-0">
               <Shield className="w-4 h-4 text-white" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-[15px] tracking-tight">RETAIN<span className="font-normal text-slate-500">AI</span></span>
-                <span className="hidden sm:inline text-[10px] border border-slate-200 bg-slate-50 px-1.5 py-0.5 rounded font-mono text-slate-600">AUTONOMOUS ENGINE v1.0</span>
+                <span className="font-bold text-[15px] tracking-tight whitespace-nowrap">RETAIN<span className="font-normal text-slate-500">AI</span></span>
+                <span className="hidden sm:inline text-[10px] border border-slate-200 bg-slate-50 px-1.5 py-0.5 rounded font-mono text-slate-600 whitespace-nowrap">AUTONOMOUS ENGINE v1.0</span>
               </div>
-              <p className="hidden sm:block text-[11px] text-slate-500 -mt-0.5">Customer retention intelligence — closed-loop system</p>
+              <p className="hidden sm:block text-[11px] text-slate-500 -mt-0.5 leading-none truncate">Customer retention intelligence — closed-loop system</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="hidden lg:flex items-center gap-1.5 text-xs font-mono text-slate-500 border border-slate-200 bg-slate-50 px-2.5 py-1.5 rounded-lg">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="truncate max-w-[180px]">{user?.email || 'demo@retainai.io'} · {tenantId || 'demo-tenant-001'}</span>
-              {hasCustomers===false && <span className="bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded">No customers</span>}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <div className="hidden lg:flex items-center gap-1.5 text-xs font-mono text-slate-500 border border-slate-200 bg-slate-50 px-2.5 py-1.5 rounded-lg max-w-[220px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="truncate max-w-[180px]" title={`${user?.email || 'demo@retainai.io'} · ${tenantId || 'demo-tenant-001'}`}>{user?.email || 'demo@retainai.io'} · {tenantId || 'demo-tenant-001'}</span>
+              {hasCustomers===false && <span className="bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded whitespace-nowrap shrink-0">No customers</span>}
             </div>
-            <button onClick={()=>{ setActiveTab('onboarding'); window.scrollTo({top:0, behavior:'smooth'}); }} className="hidden sm:inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50">
-              <Users className="w-3.5 h-3.5" /> Onboarding
+            <button onClick={()=>{ setActiveTab('onboarding'); window.scrollTo({top:0, behavior:'smooth'}); }} className="hidden sm:inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50 whitespace-nowrap shrink-0">
+              <Users className="w-3.5 h-3.5 shrink-0" /> Onboarding
             </button>
-            <button onClick={()=>{ setCustomersImportOpen(true); setActiveTab('customers'); window.scrollTo({top:0, behavior:'smooth'}); }} className="hidden sm:inline-flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold">
-              <Upload className="w-3.5 h-3.5" /> Import
+            <button onClick={()=>{ setCustomersImportOpen(true); setActiveTab('customers'); window.scrollTo({top:0, behavior:'smooth'}); }} className="hidden sm:inline-flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0">
+              <Upload className="w-3.5 h-3.5 shrink-0" /> Import
             </button>
             {isAuthenticated && user ? (
-              <button onClick={() => { try { localStorage.removeItem('retainai_bypass'); } catch {}; logout(); window.location.reload(); }} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50">
-                <LogOut className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Logout</span>
+              <button onClick={() => { try { localStorage.removeItem('retainai_bypass'); } catch {}; logout(); window.location.reload(); }} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50 whitespace-nowrap shrink-0">
+                <LogOut className="w-3.5 h-3.5 shrink-0" /> <span className="hidden sm:inline">Logout</span>
               </button>
             ) : (
-              <button onClick={() => setShowLogin(true)} className="inline-flex items-center gap-1.5 bg-[#0F172A] text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800">
-                <LogIn className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Login</span>
+              <button onClick={() => setShowLogin(true)} className="inline-flex items-center gap-1.5 bg-[#0F172A] text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 whitespace-nowrap shrink-0">
+                <LogIn className="w-3.5 h-3.5 shrink-0" /> <span className="hidden sm:inline">Login</span>
               </button>
             )}
-            <div className="flex items-center gap-1">
-              <button onClick={handleResetDemo} disabled={resetting} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border disabled:opacity-50 ${confirmReset ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'bg-white hover:bg-slate-50 border-slate-200'}`}>
-                <RefreshCw className={`w-3.5 h-3.5 ${resetting? 'animate-spin':''}`} /> <span className="hidden sm:inline">{confirmReset ? 'Confirm?' : 'Reset'}</span>
+            <div className="flex items-center gap-1 shrink-0">
+              <button onClick={handleResetDemo} disabled={resetting} className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border disabled:opacity-50 whitespace-nowrap ${confirmReset ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'bg-white hover:bg-slate-50 border-slate-200'}`}>
+                <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${resetting? 'animate-spin':''}`} /> <span className="hidden sm:inline">{confirmReset ? 'Confirm?' : 'Reset'}</span>
               </button>
-              {confirmReset && <button onClick={()=>setConfirmReset(false)} className="text-xs border border-slate-200 bg-white px-2 py-1.5 rounded-lg hover:bg-slate-50">Cancel</button>}
+              {confirmReset && <button onClick={()=>setConfirmReset(false)} className="text-xs border border-slate-200 bg-white px-2 py-1.5 rounded-lg hover:bg-slate-50 whitespace-nowrap shrink-0">Cancel</button>}
             </div>
           </div>
         </div>
@@ -258,6 +260,7 @@ export function App() {
           {activeTab==='interventions' && <InterventionsView />}
           {activeTab==='learning' && <LearningView />}
           {activeTab==='analytics' && <AnalyticsView />}
+          {activeTab==='datahub' && <DataHubView onSelectCustomer={handleSelectCustomer} />}
           {activeTab==='onboarding' && <Onboarding onComplete={()=> setActiveTab('command')} />}
           {activeTab==='settings' && <SettingsView />}
           {activeTab==='audit' && <AuditView />}
