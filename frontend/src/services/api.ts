@@ -7,6 +7,17 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Tenant + JWT interceptor (Phase 1) — reads from AuthContext persist keys
+api.interceptors.request.use((config) => {
+  try {
+    const token = localStorage.getItem('retainai_jwt');
+    const tenantId = localStorage.getItem('retainai_tenant_id') || localStorage.getItem('retainai_tenantId') || 'demo-tenant-001';
+    if (token) (config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    if (tenantId) (config.headers as Record<string, string>)['X-Tenant-Id'] = tenantId;
+  } catch {}
+  return config;
+});
+
 export interface Customer {
   id: string; name: string; domain: string; segment: string; industry: string; plan: string;
   arr: number; mrr?: number; csm_name: string; csm_email: string; start_date: string; renewal_date: string;
@@ -84,5 +95,32 @@ export const uploadBulkEvents = async (customerId:string, events:{event_type:str
 };
 export const seedSample = async (): Promise<{status:string;seeded:number;skipped:number;tenant_id:string;message:string}> => {
   const r = await api.post('/system/seed-sample');
+  return r.data;
+};
+
+// — Phase 1 & 3: Auth & Org Settings —
+export const signup = async (email:string,password:string,orgName:string): Promise<{access_token:string;tenant_id:string;user_id:string}> => {
+  const r = await api.post('/auth/signup', {email, password, orgName, name: orgName, tenant_name: orgName});
+  return r.data;
+};
+export const login = async (email:string,password:string): Promise<{access_token:string;role:string;tenant_id:string}> => {
+  const r = await api.post('/auth/login', {email, password});
+  return r.data;
+};
+export const getMe = async (): Promise<{email:string;role:string;tenant_id:string}> => {
+  const r = await api.get('/auth/me');
+  return r.data;
+};
+export interface OrgSettingsResp { tenant_id:string; health_weights:Record<string,number>; risk_thresholds:Record<string,number>; llm_provider:string; llm_model:string; has_llm_key:boolean; investigation_prompt:string|null; action_prompt:string|null; updated_at?:string; }
+export const getOrgSettings = async (): Promise<OrgSettingsResp> => {
+  const r = await api.get<OrgSettingsResp>('/org/settings');
+  return r.data;
+};
+export const updateOrgSettings = async (payload: Record<string,unknown>): Promise<OrgSettingsResp> => {
+  const r = await api.put<OrgSettingsResp>('/org/settings', payload);
+  return r.data;
+};
+export const getOrgUsage = async (): Promise<{tenant_id:string; events_ingested:number; agent_runs:number; memories:number; customers:number; interventions:number; outcomes:number}> => {
+  const r = await api.get('/org/usage');
   return r.data;
 };

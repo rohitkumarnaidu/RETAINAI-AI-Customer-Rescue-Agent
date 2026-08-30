@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { uploadCustomersCsv, createCustomer, getCustomerCsvTemplate } from '../services/api';
 import { Card, SectionHeader } from './ui';
-import { Upload, Download, FileSpreadsheet, X, CheckCircle2, AlertTriangle, Plus, Loader2, UserPlus, ArrowRight, RefreshCw } from 'lucide-react';
+import { Upload, Download, FileSpreadsheet, X, CheckCircle2, AlertTriangle, Plus, Loader2, UserPlus, RefreshCw } from 'lucide-react';
 
 const RETAIN_FIELDS = ['name','domain','segment','industry','plan','arr','mrr','csm_name','csm_email','health_score','risk_level','renewal_date','status'] as const;
 type RetainField = typeof RETAIN_FIELDS[number];
@@ -83,7 +83,7 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
   const [columnMapping, setColumnMapping] = useState<Record<RetainField,string>>(()=> ({} as Record<RetainField,string>));
   const [showMapping, setShowMapping] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<unknown>(null);
+  const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   // Add single customer form
   const [showAddForm, setShowAddForm] = useState(false);
@@ -370,20 +370,19 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
       {/* Column Mapping UI */}
       {previewHeaders.length>0 && (
         <Card>
-          <SectionHeader
-            title="Column Mapping"
-            subtitle={`Map your CSV headers → RETAINAI fields. Required: name*. Rewrites CSV client-side before upload.`}
-            icon={ArrowRight}
-            action={
-              <div className="flex items-center gap-1.5">
-                <button onClick={()=> setShowMapping(v=>!v)} className={`text-xs px-3 py-1.5 rounded-lg border font-medium ${showMapping ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{showMapping ? 'Hide mapping' : 'Map columns'}</button>
-                {showMapping && <button onClick={()=>{
-                  const m = autoMap(previewHeaders);
-                  setColumnMapping(m);
-                }} className="text-xs border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"><RefreshCw className="w-3 h-3" /> Auto-map</button>}
-              </div>
-            }
-          />
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div>
+              <div className="text-sm font-semibold">Column Mapping</div>
+              <div className="text-xs text-slate-500">Map your CSV headers → RETAINAI fields. Required: name*. Rewrites CSV client-side before upload.</div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button onClick={()=> setShowMapping(v=>!v)} className={`text-xs px-3 py-1.5 rounded-lg border font-medium ${showMapping ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{showMapping ? 'Hide mapping' : 'Map columns'}</button>
+              {showMapping && <button onClick={()=>{
+                const m = autoMap(previewHeaders);
+                setColumnMapping(m);
+              }} className="text-xs border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"><RefreshCw className="w-3 h-3" /> Auto-map</button>}
+            </div>
+          </div>
           <div className="text-xs text-slate-500 mb-3">Detected headers: <span className="font-mono text-slate-700">{previewHeaders.join(', ')}</span> · {fullRows.length} rows</div>
           {!showMapping ? (
             <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-3">

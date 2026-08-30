@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sliders, Brain, Key, FileText, Save, RefreshCw, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
+import { Sliders, Key, FileText, Save, RefreshCw, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { Card, SectionHeader } from './ui';
 import { api } from '../services/api';
 
