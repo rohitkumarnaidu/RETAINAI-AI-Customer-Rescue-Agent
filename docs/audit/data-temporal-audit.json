@@ -1,0 +1,75 @@
+{
+  "generated_at": "2026-08-30T11:18:31.799841+00:00",
+  "dataset_version": "dataset-v2",
+  "temporal_violations": [],
+  "violation_count": 0,
+  "target": 0,
+  "pass": true,
+  "expected_days": 31,
+  "usage_per_customer": {
+    "expected_days": 31,
+    "customers_with_exact": 101,
+    "customers_with_less": 0,
+    "customers_with_more": 0
+  },
+  "customer_timelines_sample": {
+    "b2a88551-82e5-43d7-b620-ba1640900c71": {
+      "usage": 31,
+      "tickets": 1,
+      "feedback": 1,
+      "creation": "2026-04-27T07:04:00.588829+00:00",
+      "usage_range": [
+        "2026-07-31T07:04:00.588571+00:00",
+        "2026-08-30T07:04:00.588571+00:00"
+      ]
+    },
+    "be898a38-b9ae-4aee-b371-852c79ff8a83": {
+      "usage": 31,
+      "tickets": 0,
+      "feedback": 0,
+      "creation": "2025-06-24T07:04:00.588984+00:00",
+      "usage_range": [
+        "2026-07-31T07:04:00.588571+00:00",
+        "2026-08-30T07:04:00.588571+00:00"
+      ]
+    }
+  },
+  "acme_timeline": {
+    "customer": "b2a88551-82e5-43d7-b620-ba1640900c71",
+    "usage_decline": -67.27272727272727,
+    "ticket": [
+      {
+        "id": "84499dc7-bbf7-4f95-a648-8ef3a1920e39",
+        "customer_id": "b2a88551-82e5-43d7-b620-ba1640900c71",
+        "created_at": "2026-08-16T07:04:00.588571+00:00",
+        "resolved_at": null,
+        "severity": "HIGH",
+        "category": "BUG",
+        "subject": "Data export failing consistently",
+        "status": "OPEN",
+        "metadata": {
+          "source_type": "SYNTHETIC",
+          "generation_version": "dataset-v2",
+          "generation_seed": 42
+        }
+      }
+    ],
+    "feedback": [
+      {
+        "id": "910778a1-bb64-4a21-b224-cf79ffbdde2d",
+        "customer_id": "b2a88551-82e5-43d7-b620-ba1640900c71",
+        "timestamp": "2026-08-20T07:04:00.588571+00:00",
+        "channel": "NPS_SURVEY",
+        "score": 3,
+        "sentiment": "NEGATIVE",
+        "feedback_text": "Frustrated with reporting bugs. The export hasn't worked for days.",
+        "metadata": {
+          "source_type": "SYNTHETIC",
+          "generation_version": "dataset-v2",
+          "generation_seed": 42,
+          "generation_timestamp": "2026-08-30T07:04:00.588571+00:00"
+        }
+      }
+    ]
+  }
+}

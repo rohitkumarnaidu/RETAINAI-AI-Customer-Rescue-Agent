@@ -1,0 +1,14 @@
+{
+  "dataset_version": "dataset-v2",
+  "dataset_hash": "f41aec09bbf0",
+  "seed": 42,
+  "generation_command": "python scripts/data/build_retainai_dataset.py --seed 42 --reference-date 2026-08-30T07:04:00+00:00",
+  "validation_command": "python scripts/data/audit_dataset.py",
+  "audit_date": "2026-08-30T11:18:38.430568+00:00",
+  "customers": 101,
+  "usage_events": 3131,
+  "support_tickets": 82,
+  "feedback_events": 94,
+  "data_quality_score": 96.5,
+  "overall_status": "PASS"
+}

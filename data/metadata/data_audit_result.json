@@ -1,0 +1,134 @@
+{
+  "audit_version": "audit-v1.0",
+  "audit_timestamp": "2026-08-30T11:20:30.515727+00:00",
+  "dataset_version": "dataset-v2",
+  "dataset_path": "data\\seed\\retainai_dataset_v2.json",
+  "dataset_hash": "f41aec09bbf0",
+  "overall_status": "PASS",
+  "data_quality_score": 96.5,
+  "scores_breakdown": {
+    "schema": 10.0,
+    "referential": 10.0,
+    "temporal": 10,
+    "provenance": 10.0,
+    "missingness": 5.0,
+    "duplicate": 5.0,
+    "range": 5.0,
+    "distribution": 8.0,
+    "signal": 8.5,
+    "leakage": 15.0,
+    "reproducibility": 5.0,
+    "demo": 5.0
+  },
+  "customers": 101,
+  "usage_events": 3131,
+  "support_tickets": 82,
+  "feedback_events": 94,
+  "referential_integrity": 1.0,
+  "temporal_integrity": 1,
+  "provenance_coverage": 1.0,
+  "provenance_details": {
+    "customers_with_source_type": 101,
+    "usage_with_source_type": 3131,
+    "tickets_with_source_type": 82,
+    "feedback_with_source_type": 94,
+    "tickets_public_with_source_id": 81,
+    "tickets_public_total": 81,
+    "synthetic_with_generation_version": 101
+  },
+  "duplicate_rate": 0.0,
+  "duplicates": {
+    "customer_dup": 0,
+    "usage_dup": 0,
+    "ticket_dup": 0,
+    "feedback_dup": 0,
+    "usage_key_dup": 0
+  },
+  "missing_data_rate": 0.0,
+  "missing_fields_sample": [],
+  "temporal_violations": [],
+  "temporal_integrity_violations_count": 0,
+  "leakage_detected": false,
+  "reproducible": true,
+  "repro_issues": [],
+  "acme_scenario_valid": true,
+  "acme_details": {
+    "acme_id": "b2a88551-82e5-43d7-b620-ba1640900c71",
+    "acme_name": "Acme Corp",
+    "usage_count": 31,
+    "ticket_count": 1,
+    "feedback_count": 1,
+    "first_week_avg": 188.57142857142858,
+    "last_week_avg": 61.714285714285715,
+    "decline_pct": -67.27272727272727,
+    "last_7_admin_logins": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "acme_issues": [],
+  "usage_per_customer": {
+    "expected_days": 31,
+    "customers_with_exact": 101,
+    "customers_with_less": 0,
+    "customers_with_more": 0
+  },
+  "archetype_stats": {
+    "ACME_HERO": {
+      "customer_count": 1,
+      "avg_dau": 130.6,
+      "tickets_per_customer": 1.0,
+      "neg_feedback_rate": 1.0,
+      "feedback_count": 1
+    },
+    "AT_RISK": {
+      "customer_count": 12,
+      "avg_dau": 231.2,
+      "tickets_per_customer": 1.83,
+      "neg_feedback_rate": 1.0,
+      "feedback_count": 22
+    },
+    "HEALTHY": {
+      "customer_count": 60,
+      "avg_dau": 264.3,
+      "tickets_per_customer": 0.3,
+      "neg_feedback_rate": 0.0,
+      "feedback_count": 44
+    },
+    "EARLY_WARNING": {
+      "customer_count": 19,
+      "avg_dau": 192.8,
+      "tickets_per_customer": 1.47,
+      "neg_feedback_rate": 0.0,
+      "feedback_count": 20
+    },
+    "RECOVERING": {
+      "customer_count": 7,
+      "avg_dau": 278.4,
+      "tickets_per_customer": 1.14,
+      "neg_feedback_rate": 0.0,
+      "feedback_count": 4
+    },
+    "CRITICAL": {
+      "customer_count": 2,
+      "avg_dau": 186.0,
+      "tickets_per_customer": 2.5,
+      "neg_feedback_rate": 1.0,
+      "feedback_count": 3
+    }
+  },
+  "mrr_outliers": [
+    12000.0
+  ],
+  "dau_outliers": [],
+  "blockers": 0,
+  "critical_issues": 0,
+  "important_issues": 0,
+  "warnings": 0,
+  "issues": []
+}
