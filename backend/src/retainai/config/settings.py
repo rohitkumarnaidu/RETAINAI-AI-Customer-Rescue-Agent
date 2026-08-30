@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     RISK_HIGH_THRESHOLD: float = 40.0
     RISK_AT_RISK_THRESHOLD: float = 60.0
     RISK_WATCH_THRESHOLD: float = 80.0
+    RISK_HEALTHY_THRESHOLD: float = 90.0
 
     @property
     def health_weights(self) -> HealthWeights:

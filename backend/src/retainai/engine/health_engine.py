@@ -37,6 +37,8 @@ class HealthEngine:
                 sentiment_h -= s.impact_score
             elif s.category == "ACTIVITY":
                 engagement_h -= s.impact_score
+            elif s.category == "USAGE_CONTEXT":
+                usage_h -= s.impact_score
 
         # Clamp individual health scores to [0.0, 100.0]
         usage_h = max(0.0, min(100.0, usage_h))

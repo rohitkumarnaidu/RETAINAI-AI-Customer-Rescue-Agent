@@ -9,8 +9,13 @@ from sqlalchemy.orm import DeclarativeBase
 
 logger = logging.getLogger("retainai.db")
 
-# Default to SQLite for easy zero-setup local dev/testing, with PostgreSQL support available
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./retainai.db")
+# Single source of truth via settings (fixes triple .db divergence P0-03)
+# Keep os.getenv fallback for early import before settings loads, but prefer settings
+try:
+    from retainai.config.settings import settings as _settings
+    DATABASE_URL = _settings.DATABASE_URL
+except Exception:
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./retainai.db")
 
 engine = create_async_engine(
     DATABASE_URL,

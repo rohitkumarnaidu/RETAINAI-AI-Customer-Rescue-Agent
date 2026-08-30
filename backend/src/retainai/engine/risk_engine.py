@@ -58,7 +58,7 @@ class RiskEngine:
             return RiskLevel.AT_RISK
         elif health_score < settings.RISK_WATCH_THRESHOLD:
             return RiskLevel.WATCH
-        elif health_score < 90.0:
+        elif health_score < settings.RISK_HEALTHY_THRESHOLD:
             return RiskLevel.STABLE
         else:
             return RiskLevel.HEALTHY
@@ -112,7 +112,7 @@ class RiskEngine:
             uncertainty.append("sparse_data: confidence reduced due to limited telemetry")
         # Detect contradictory signals (improving usage but negative feedback)
         has_decline = any("DECLINE" in s for s in signal_names)
-        any(s == "ADMIN_INACTIVITY" for s in signal_names)
+        has_admin_inactivity = any(s == "ADMIN_INACTIVITY" for s in signal_names)
         has_false_positive = any(s == "FALSE_POSITIVE_SAFEGUARD" for s in signal_names)
         if has_decline and has_false_positive:
             uncertainty.append("conflicting_evidence: usage decline vs high efficiency suggests false positive, manual review recommended")

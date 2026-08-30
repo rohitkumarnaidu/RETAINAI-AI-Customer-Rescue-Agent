@@ -80,9 +80,15 @@ async def add_request_id(request: Request, call_next):
     return response
 
 
-# Centralized structured error handling (S47/S97)
+# Centralized structured error handling (S47/S97) — preserve HTTPException status codes
+from fastapi.exceptions import HTTPException as FastAPIHTTPException
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    # Preserve intentional HTTP errors (404/401/422 etc.) — must not be masked as 500
+    if isinstance(exc, (FastAPIHTTPException, StarletteHTTPException)):
+        raise exc
     request_id = request.headers.get("X-Request-ID") or f"req_{uuid.uuid4().hex[:8]}"
     logger.error(f"Unhandled error request_id={request_id} path={request.url.path} error={exc}", exc_info=True)
     if settings.DEBUG:
