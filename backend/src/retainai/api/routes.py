@@ -313,7 +313,13 @@ async def get_interventions(customer_id: str, db: AsyncSession = Depends(get_db)
 
 @router.post("/interventions", response_model=InterventionSchema)
 async def create_intervention(req: InterventionCreateRequest, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
-    """Create new intervention proposed plan."""
+    """Create new intervention proposed plan — validates investigation_id FK (P0-04)."""
+    # Validate investigation_id exists to avoid FK IntegrityError
+    if req.investigation_id:
+        from retainai.db.models import InvestigationReport
+        res = await db.execute(select(InvestigationReport).where(InvestigationReport.id == req.investigation_id))
+        if not res.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail=f"investigation_id {req.investigation_id} not found")
     service = InterventionService(db)
     inv = Intervention(
         id=f"inv_{req.customer_id[:8]}_{uuid.uuid4().hex[:8]}",
@@ -502,15 +508,34 @@ async def list_all_outcomes(
 async def get_observability_metrics(db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Observability metrics per S44."""
     from sqlalchemy import select
-    from retainai.db.models import AgentRun
+    from retainai.db.models import AgentRun, AgentStep
     # Agent latency approximations via run durations
     runs_res = await db.execute(select(AgentRun))
     runs = list(runs_res.scalars().all())
     total_runs = len(runs)
     completed = sum(1 for r in runs if str(getattr(r.status, "value", r.status)) == "COMPLETED")
     failed = total_runs - completed
-    # Tool success approx
+    # Tool success computed from AgentStep or tool_calls status
     total_tool_calls = sum(len(r.tool_calls or []) for r in runs)
+    # Prefer AgentStep table when available, else fall back to tool_calls entries
+    try:
+        steps_res = await db.execute(select(AgentStep))
+        steps = list(steps_res.scalars().all())
+    except Exception:
+        steps = []
+    if steps:
+        total_steps = len(steps)
+        successful_steps = sum(1 for s in steps if str(getattr(s.status, "value", s.status)).upper() == "SUCCESS")
+        tool_success_rate = round(successful_steps / max(1, total_steps), 2) if total_steps > 0 else (round(completed / max(1, total_runs), 2) if total_runs > 0 else 1.0)
+        total_tool_calls = total_steps
+    else:
+        successful_calls = sum(sum(1 for tc in (r.tool_calls or []) if str(tc.get("status", "")).lower() == "success") for r in runs)
+        if total_tool_calls > 0:
+            tool_success_rate = round(successful_calls / total_tool_calls, 2)
+        elif total_runs > 0:
+            tool_success_rate = round(completed / max(1, total_runs), 2)
+        else:
+            tool_success_rate = 1.0
     # Outcomes
     out_res = await db.execute(select(InterventionOutcome))
     outcomes = list(out_res.scalars().all())
@@ -522,7 +547,7 @@ async def get_observability_metrics(db: AsyncSession = Depends(get_db), user: di
     return {
         "request_id": f"req_{uuid.uuid4().hex[:8]}",
         "agent_runs": {"total": total_runs, "completed": completed, "failed": failed, "completion_rate": round(completed/max(1,total_runs),2)},
-        "tool_calls": {"total": total_tool_calls, "success_rate": 0.97 if total_runs>0 else 1.0},
+        "tool_calls": {"total": total_tool_calls, "success_rate": tool_success_rate},
         "outcomes": {"total": len(outcomes), "success": success_outcomes, "success_rate": round(success_outcomes/max(1,len(outcomes)),2)},
         "learning": {"candidates": len(candidates), "validated_memories": len([m for m in (await MemoryRepository(db).list_all()) if str(getattr(m.validation_status, "value", m.validation_status)) == "VALIDATED"])},
         "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
