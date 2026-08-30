@@ -2,6 +2,7 @@
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator
+from typing import Any
 import json
 
 
@@ -36,12 +37,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""  # alias when provider=openai/gpt (sk-...) — live branch requires real key
 
     API_V1_PREFIX: str = "/api/v1"
-    CORS_ORIGINS: list[str] = Field(default=["http://localhost:5173", "http://127.0.0.1:5173"])
+    CORS_ORIGINS: Any = Field(default=["http://localhost:5173", "http://127.0.0.1:5173"])
     DEMO_MODE: bool = True
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v):
+    def parse_cors_origins(cls, v: Any) -> list[str]:
         if isinstance(v, str):
             v = v.strip()
             if not v:
@@ -58,6 +59,8 @@ class Settings(BaseSettings):
             if "," in v:
                 return [s.strip() for s in v.split(",") if s.strip()]
             return [v]
+        if isinstance(v, list):
+            return [str(x).strip() for x in v if str(x).strip()]
         return v
     LOG_LEVEL: str = "INFO"
     AUTH_ENABLED: bool = False

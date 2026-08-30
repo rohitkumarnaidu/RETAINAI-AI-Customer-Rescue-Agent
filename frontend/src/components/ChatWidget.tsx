@@ -65,8 +65,8 @@ export const ChatWidget: React.FC<{ customerId?:string; customerName?:string }> 
     setConversationId(undefined); setMessages([]); setStreamingText(''); setSpecialists({}); setActiveSpecialists({}); setShowConvs(false);
   };
 
-  const send = async(override?:string)=>{
-    const q=(override ?? input).trim(); if(!q||loading) return;
+  const send = async(override?:string | any)=>{
+    const q=(typeof override==='string' ? override : input).trim(); if(!q||loading) return;
     setInput(''); setError(null);
     const userMsg: Msg={role:'user', content:q};
     setMessages(prev=>[...prev, userMsg]);
@@ -148,6 +148,19 @@ export const ChatWidget: React.FC<{ customerId?:string; customerName?:string }> 
   const handleKey=(e:React.KeyboardEvent)=>{
     if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }
   };
+
+  // Listen for quick-ask from Customer360 CTA (auto-open + send)
+  useEffect(()=>{
+    const handler = (e:any)=>{
+      const q = e.detail?.q as string;
+      if(q && !loading){
+        setOpen(true);
+        setTimeout(()=> { try{ (send as any)(q); }catch{} }, 350);
+      }
+    };
+    window.addEventListener('retainai-chat-ask', handler as EventListener);
+    return ()=> window.removeEventListener('retainai-chat-ask', handler as EventListener);
+  }, [loading, customerId, conversationId]);
 
   const suggestions = customerId ? [
     `Why is ${customerName||'this customer'} at risk?`,

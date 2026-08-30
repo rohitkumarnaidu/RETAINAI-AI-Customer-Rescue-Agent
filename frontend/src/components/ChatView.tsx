@@ -55,8 +55,8 @@ export const ChatView: React.FC<{ onSelectCustomer?:(id:string)=>void }> = ({onS
     setConversations(prev=>prev.filter(c=>c.id!==id));
     if(conversationId===id){ setConversationId(undefined); setMessages([]);}
   };
-  const send=async(override?:string)=>{
-    const q=(override ?? input).trim(); if(!q||loading) return;
+  const send=async(override?:string | any)=>{
+    const q=(typeof override==='string' ? override : input).trim(); if(!q||loading) return;
     setInput(''); setError(null);
     const hist=[...messages, {role:'user' as const, content:q}].slice(-8).map(m=>({role:m.role, content:m.content}));
     setMessages(prev=>[...prev, {role:'user', content:q}]);
@@ -259,7 +259,7 @@ export const ChatView: React.FC<{ onSelectCustomer?:(id:string)=>void }> = ({onS
                 className="flex-1 resize-none border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 placeholder:text-slate-400 max-h-24"
                 style={{minHeight:'44px'}}
               />
-              <button onClick={send} disabled={loading||!input.trim()} className="w-11 h-11 rounded-xl bg-[#0F172A] text-white flex items-center justify-center hover:bg-slate-800 disabled:opacity-40 shrink-0">
+              <button onClick={()=> send()} disabled={loading||!input.trim()} className="w-11 h-11 rounded-xl bg-[#0F172A] text-white flex items-center justify-center hover:bg-slate-800 disabled:opacity-40 shrink-0">
                 <Send className="w-4 h-4"/>
               </button>
             </div>
