@@ -9,6 +9,9 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
+# Deterministic reference date for reproducibility (original generation: 2026-08-30T07:04:00+00:00)
+DEFAULT_REF_DATE = datetime(2026, 8, 30, 7, 4, 0, tzinfo=timezone.utc)
+
 def load_public_tickets():
     path = "data/raw/helpdesk_tickets.csv"
     if not os.path.exists(path):
@@ -22,7 +25,11 @@ def load_public_tickets():
             tickets.append(row)
     return tickets
 
-def generate_customer(cid, name, tier, mrr, csm, archetype):
+def deterministic_uuid(rng: random.Random) -> str:
+    """Generate UUIDv4 deterministically from seeded RNG (for reproducibility)."""
+    return str(uuid.UUID(int=rng.getrandbits(128), version=4))
+
+def generate_customer(cid, name, tier, mrr, csm, archetype, rng: random.Random, now: datetime, seed: int):
     return {
         "id": cid,
         "name": name,
@@ -31,24 +38,29 @@ def generate_customer(cid, name, tier, mrr, csm, archetype):
         "mrr": mrr,
         "csm_name": csm,
         "archetype": archetype,
-        "renewal_date": (datetime.now(timezone.utc) + timedelta(days=random.randint(30, 300))).isoformat(),
-        "created_at": (datetime.now(timezone.utc) - timedelta(days=random.randint(100, 700))).isoformat(),
+        "renewal_date": (now + timedelta(days=rng.randint(30, 300))).isoformat(),
+        "created_at": (now - timedelta(days=rng.randint(100, 700))).isoformat(),
         "metadata": {
             "source_type": "SYNTHETIC",
-            "generation_version": "dataset-v2"
+            "generation_version": "dataset-v2",
+            "generation_seed": seed,
+            "generation_timestamp": now.isoformat()
         }
     }
 
-def get_ticket_details(public_tickets, default_subject, default_severity, default_category):
+def get_ticket_details(public_tickets, default_subject, default_severity, default_category, rng: random.Random):
     if not public_tickets:
         return default_subject, default_severity, default_category, None
         
-    t = random.choice(public_tickets)
+    t = rng.choice(public_tickets)
     return t.get('subject', default_subject), t.get('priority', default_severity).upper(), t.get('category', default_category).upper(), t.get('id')
 
-def build_portfolio(seed, num_customers):
+def build_portfolio(seed, num_customers, reference_date: datetime | None = None):
+    rng = random.Random(seed)
+    # Use deterministic reference date for reproducibility; default to original generation timestamp
+    now = reference_date if reference_date is not None else DEFAULT_REF_DATE
+    # Seed global random as well for any legacy calls (kept for backward compatibility)
     random.seed(seed)
-    now = datetime.now(timezone.utc)
     public_tickets = load_public_tickets()
     
     customers = []
@@ -56,98 +68,99 @@ def build_portfolio(seed, num_customers):
     support_tickets = []
     feedbacks = []
     
-    # --- ACME DEMO SCENARIO (Hardcoded Hero) ---
-    acme_id = str(uuid.uuid4())
-    customers.append(generate_customer(acme_id, "Acme Corp", "Enterprise", 12000.0, "Sarah Johnson", "ACME_HERO"))
+    # --- ACME DEMO SCENARIO (Hardcoded Hero — ID frozen for docs/DB compatibility) ---
+    # Keep Acme ID deterministic and stable (was random UUID in v2, now frozen to match DATA_MODEL.md)
+    acme_id = "b2a88551-82e5-43d7-b620-ba1640900c71"
+    customers.append(generate_customer(acme_id, "Acme Corp", "Enterprise", 12000.0, "Sarah Johnson", "ACME_HERO", rng, now, seed))
     
     for day_offset in range(30, -1, -1):
         event_date = now - timedelta(days=day_offset)
         # Usage
         if day_offset > 21:
-            dau, util, clicks, admins = random.randint(180, 200), 0.90, random.randint(500, 600), random.randint(2, 5)
+            dau, util, clicks, admins = rng.randint(180, 200), 0.90, rng.randint(500, 600), rng.randint(2, 5)
         elif day_offset > 7:
-            dau, util, clicks, admins = random.randint(120, 150), 0.70, random.randint(300, 400), random.randint(0, 2)
+            dau, util, clicks, admins = rng.randint(120, 150), 0.70, rng.randint(300, 400), rng.randint(0, 2)
         else:
-            dau, util, clicks, admins = random.randint(40, 80), 0.40, random.randint(50, 150), 0
+            dau, util, clicks, admins = rng.randint(40, 80), 0.40, rng.randint(50, 150), 0
 
         usage_events.append({
-            "id": str(uuid.uuid4()), "customer_id": acme_id, "timestamp": event_date.isoformat(),
+            "id": deterministic_uuid(rng), "customer_id": acme_id, "timestamp": event_date.isoformat(),
             "dau": dau, "license_utilization_pct": util, "core_feature_clicks": clicks,
             "export_events": int(clicks * 0.1), "admin_logins": admins,
-            "metadata": {"source_type": "SYNTHETIC"}
+            "metadata": {"source_type": "SYNTHETIC", "generation_version": "dataset-v2", "generation_seed": seed, "generation_timestamp": now.isoformat()}
         })
         # Support
         if day_offset == 14:
             support_tickets.append({
-                "id": str(uuid.uuid4()), "customer_id": acme_id, "created_at": event_date.isoformat(),
+                "id": deterministic_uuid(rng), "customer_id": acme_id, "created_at": event_date.isoformat(),
                 "resolved_at": None, "severity": "HIGH", "category": "BUG",
                 "subject": "Data export failing consistently", "status": "OPEN",
-                "metadata": {"source_type": "SYNTHETIC"}
+                "metadata": {"source_type": "SYNTHETIC", "generation_version": "dataset-v2", "generation_seed": seed}
             })
         # Feedback
         if day_offset == 10:
             feedbacks.append({
-                "id": str(uuid.uuid4()), "customer_id": acme_id, "timestamp": event_date.isoformat(),
+                "id": deterministic_uuid(rng), "customer_id": acme_id, "timestamp": event_date.isoformat(),
                 "channel": "NPS_SURVEY", "score": 3, "sentiment": "NEGATIVE",
                 "feedback_text": "Frustrated with reporting bugs. The export hasn't worked for days.",
-                "metadata": {"source_type": "SYNTHETIC"}
+                "metadata": {"source_type": "SYNTHETIC", "generation_version": "dataset-v2", "generation_seed": seed}
             })
 
     # --- 100+ CUSTOMER PORTFOLIO ---
     archetypes = ["HEALTHY"] * 60 + ["EARLY_WARNING"] * 20 + ["AT_RISK"] * 10 + ["CRITICAL"] * 5 + ["RECOVERING"] * 5
     
     for i in range(num_customers):
-        cid = str(uuid.uuid4())
-        archetype = random.choice(archetypes)
-        customers.append(generate_customer(cid, f"Synthetic Company {i}", "Mid-Market", random.uniform(1000, 5000), "Auto CSM", archetype))
+        cid = deterministic_uuid(rng)
+        archetype = rng.choice(archetypes)
+        customers.append(generate_customer(cid, f"Synthetic Company {i}", "Mid-Market", rng.uniform(1000, 5000), "Auto CSM", archetype, rng, now, seed))
         
-        base_dau = random.randint(50, 500)
+        base_dau = rng.randint(50, 500)
         
         for day_offset in range(30, -1, -1):
             event_date = now - timedelta(days=day_offset)
             
             # Archetype behavior
             if archetype == "HEALTHY":
-                dau_mod = random.uniform(0.9, 1.1)
+                dau_mod = rng.uniform(0.9, 1.1)
                 util = 0.85
                 prob_ticket = 0.01
                 prob_feedback = 0.02
-                fb_score = random.randint(8, 10)
+                fb_score = rng.randint(8, 10)
                 
             elif archetype == "AT_RISK":
                 dau_mod = 1.0 if day_offset > 15 else 0.6
                 util = 0.50
                 prob_ticket = 0.05
                 prob_feedback = 0.05
-                fb_score = random.randint(1, 4)
+                fb_score = rng.randint(1, 4)
                 
             elif archetype == "CRITICAL":
                 dau_mod = 1.0 if day_offset > 20 else (0.3 if day_offset > 5 else 0.05)
                 util = 0.20
                 prob_ticket = 0.10
                 prob_feedback = 0.05
-                fb_score = random.randint(1, 2)
+                fb_score = rng.randint(1, 2)
             else: # Defaults for Early Warning / Recovering
                 dau_mod = 0.8
                 util = 0.70
                 prob_ticket = 0.03
                 prob_feedback = 0.03
-                fb_score = random.randint(5, 7)
+                fb_score = rng.randint(5, 7)
                 
             # Insert Usage
             usage_events.append({
-                "id": str(uuid.uuid4()), "customer_id": cid, "timestamp": event_date.isoformat(),
+                "id": deterministic_uuid(rng), "customer_id": cid, "timestamp": event_date.isoformat(),
                 "dau": int(base_dau * dau_mod), "license_utilization_pct": util, 
-                "core_feature_clicks": int(base_dau * dau_mod * 5), "admin_logins": random.randint(0, 2),
-                "metadata": {"source_type": "SYNTHETIC"}
+                "core_feature_clicks": int(base_dau * dau_mod * 5), "admin_logins": rng.randint(0, 2),
+                "metadata": {"source_type": "SYNTHETIC", "generation_version": "dataset-v2", "generation_seed": seed, "generation_timestamp": now.isoformat()}
             })
             
             # Insert Support (blended with Public Data)
-            if random.random() < prob_ticket:
-                subj, sev, cat, src_id = get_ticket_details(public_tickets, "General Issue", "MEDIUM", "SOFTWARE")
-                meta = {"source_type": "PUBLIC_DATASET", "source_dataset": "Console-AI/IT-helpdesk", "source_record_id": src_id} if src_id else {"source_type": "SYNTHETIC"}
+            if rng.random() < prob_ticket:
+                subj, sev, cat, src_id = get_ticket_details(public_tickets, "General Issue", "MEDIUM", "SOFTWARE", rng)
+                meta = {"source_type": "PUBLIC_DATASET", "source_dataset": "Console-AI/IT-helpdesk", "source_record_id": src_id, "generation_version": "dataset-v2", "generation_seed": seed} if src_id else {"source_type": "SYNTHETIC", "generation_version": "dataset-v2", "generation_seed": seed}
                 support_tickets.append({
-                    "id": str(uuid.uuid4()), "customer_id": cid, "created_at": event_date.isoformat(),
+                    "id": deterministic_uuid(rng), "customer_id": cid, "created_at": event_date.isoformat(),
                     "resolved_at": (event_date + timedelta(days=2)).isoformat() if archetype == "HEALTHY" else None,
                     "severity": sev, "category": cat, "subject": subj, 
                     "status": "RESOLVED" if archetype == "HEALTHY" else "OPEN",
@@ -155,13 +168,13 @@ def build_portfolio(seed, num_customers):
                 })
 
             # Insert Feedback
-            if random.random() < prob_feedback:
+            if rng.random() < prob_feedback:
                 feedbacks.append({
-                    "id": str(uuid.uuid4()), "customer_id": cid, "timestamp": event_date.isoformat(),
+                    "id": deterministic_uuid(rng), "customer_id": cid, "timestamp": event_date.isoformat(),
                     "channel": "NPS_SURVEY", "score": fb_score, 
                     "sentiment": "POSITIVE" if fb_score > 7 else ("NEGATIVE" if fb_score < 5 else "NEUTRAL"),
                     "feedback_text": "Synthetic feedback response.",
-                    "metadata": {"source_type": "SYNTHETIC"}
+                    "metadata": {"source_type": "SYNTHETIC", "generation_version": "dataset-v2", "generation_seed": seed}
                 })
 
     dataset = {
@@ -188,5 +201,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--count', type=int, default=100)
+    parser.add_argument('--reference-date', type=str, default=None, help="ISO timestamp for deterministic generation (default: 2026-08-30T07:04:00+00:00)")
     args = parser.parse_args()
-    build_portfolio(args.seed, args.count)
+    ref = None
+    if args.reference_date:
+        try:
+            ref = datetime.fromisoformat(args.reference_date)
+            if ref.tzinfo is None:
+                ref = ref.replace(tzinfo=timezone.utc)
+        except Exception as e:
+            logging.warning(f"Invalid reference-date {args.reference_date}: {e}, using DEFAULT_REF_DATE")
+            ref = DEFAULT_REF_DATE
+    build_portfolio(args.seed, args.count, reference_date=ref)

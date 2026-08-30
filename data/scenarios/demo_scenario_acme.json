@@ -2,15 +2,15 @@
   "scenario_id": "SCENARIO-ACME-RESCUE",
   "title": "Acme Corp End-to-End Rescue Story",
   "customer": {
-    "id": "cust-acme-101",
+    "id": "b2a88551-82e5-43d7-b620-ba1640900c71",
     "name": "Acme Corp",
     "domain": "acme.com",
     "tier": "Enterprise",
-    "mrr": 12500.0,
-    "csm_name": "Sarah Jenkins",
+    "mrr": 12000.0,
+    "csm_name": "Sarah Johnson",
     "renewal_date": "2026-10-30",
     "initial_health": 88.0,
-    "initial_risk": "LOW"
+    "initial_risk": "HEALTHY"
   },
   "phase_1_baseline": {
     "days": "1-30",
@@ -47,5 +47,11 @@
     "recovered_license_utilization_pct": 86.0,
     "final_health": 82.0,
     "final_risk": "LOW"
+  },
+  "provenance": {
+    "source_type": "SYNTHETIC",
+    "generation_version": "dataset-v2",
+    "generation_seed": 42,
+    "note": "Aligned to actual generator hardcode id"
   }
 }
