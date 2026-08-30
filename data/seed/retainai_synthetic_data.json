@@ -1,0 +1,358 @@
+{
+  "metadata": {
+    "version": "dataset-v1",
+    "seed": 42,
+    "generated_at": "2026-08-30T06:50:31.004635+00:00"
+  },
+  "customers": [
+    {
+      "id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "name": "Acme Corp",
+      "domain": "acmecorp.com",
+      "tier": "Enterprise",
+      "mrr": 12000.0,
+      "csm_name": "Sarah Johnson",
+      "renewal_date": "2026-11-25T06:50:31.004657+00:00",
+      "health_score": 100.0,
+      "risk_level": "LOW",
+      "status": "ACTIVE",
+      "created_at": "2025-08-30T06:50:31.004669+00:00"
+    }
+  ],
+  "usage_events": [
+    {
+      "id": "014b7b3e-6c54-4b95-a417-5a45a18719b0",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-07-31T06:50:31.004635+00:00",
+      "dau": 180,
+      "license_utilization_pct": 0.9,
+      "core_feature_clicks": 594,
+      "export_events": 59,
+      "admin_logins": 4
+    },
+    {
+      "id": "33bce266-5d1e-442f-a297-a23cd5c9c0b4",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-01T06:50:31.004635+00:00",
+      "dau": 187,
+      "license_utilization_pct": 0.9,
+      "core_feature_clicks": 528,
+      "export_events": 52,
+      "admin_logins": 3
+    },
+    {
+      "id": "73349d2e-ab80-4f9a-8ab4-738a7bb10519",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-02T06:50:31.004635+00:00",
+      "dau": 183,
+      "license_utilization_pct": 0.9,
+      "core_feature_clicks": 586,
+      "export_events": 58,
+      "admin_logins": 2
+    },
+    {
+      "id": "2cb856cd-587e-4448-b7de-461e9df404eb",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-03T06:50:31.004635+00:00",
+      "dau": 198,
+      "license_utilization_pct": 0.9,
+      "core_feature_clicks": 554,
+      "export_events": 55,
+      "admin_logins": 2
+    },
+    {
+      "id": "7683d464-fe8c-40df-a923-bb31865b0edb",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-04T06:50:31.004635+00:00",
+      "dau": 180,
+      "license_utilization_pct": 0.9,
+      "core_feature_clicks": 511,
+      "export_events": 51,
+      "admin_logins": 3
+    },
+    {
+      "id": "f04e478a-5bbf-4ffc-8edc-8c14fd3ae17b",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-05T06:50:31.004635+00:00",
+      "dau": 187,
+      "license_utilization_pct": 0.9,
+      "core_feature_clicks": 564,
+      "export_events": 56,
+      "admin_logins": 2
+    },
+    {
+      "id": "ba4161f0-383c-4ee1-8cc5-12b7a0b3ca55",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-06T06:50:31.004635+00:00",
+      "dau": 197,
+      "license_utilization_pct": 0.9,
+      "core_feature_clicks": 525,
+      "export_events": 52,
+      "admin_logins": 5
+    },
+    {
+      "id": "39303ca9-b38e-4e7b-ae5e-d626e8f34629",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-07T06:50:31.004635+00:00",
+      "dau": 187,
+      "license_utilization_pct": 0.9,
+      "core_feature_clicks": 557,
+      "export_events": 55,
+      "admin_logins": 4
+    },
+    {
+      "id": "50abcf4f-6299-42dc-a890-4f71f110c387",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-08T06:50:31.004635+00:00",
+      "dau": 180,
+      "license_utilization_pct": 0.9,
+      "core_feature_clicks": 597,
+      "export_events": 59,
+      "admin_logins": 3
+    },
+    {
+      "id": "ceeb48bf-ffd0-4945-8778-3109e4803079",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-09T06:50:31.004635+00:00",
+      "dau": 142,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 354,
+      "export_events": 35,
+      "admin_logins": 1
+    },
+    {
+      "id": "24b2c235-924a-473b-a86e-520dbf0dbda3",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-10T06:50:31.004635+00:00",
+      "dau": 128,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 319,
+      "export_events": 31,
+      "admin_logins": 0
+    },
+    {
+      "id": "d2c1a965-7738-4919-bca8-8ecdd2bc2f65",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-11T06:50:31.004635+00:00",
+      "dau": 150,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 397,
+      "export_events": 39,
+      "admin_logins": 1
+    },
+    {
+      "id": "6f97a592-c852-4215-84b4-16614554acfd",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-12T06:50:31.004635+00:00",
+      "dau": 123,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 311,
+      "export_events": 31,
+      "admin_logins": 1
+    },
+    {
+      "id": "df865132-e469-4756-b912-7d8780950f29",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-13T06:50:31.004635+00:00",
+      "dau": 123,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 345,
+      "export_events": 34,
+      "admin_logins": 1
+    },
+    {
+      "id": "3d283110-5a25-4212-806a-384097c8ffe1",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-14T06:50:31.004635+00:00",
+      "dau": 139,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 333,
+      "export_events": 33,
+      "admin_logins": 0
+    },
+    {
+      "id": "d6bab5d4-06e8-4b6a-abdb-904b3d07fc73",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-15T06:50:31.004635+00:00",
+      "dau": 143,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 358,
+      "export_events": 35,
+      "admin_logins": 2
+    },
+    {
+      "id": "94ca586e-c10a-439c-9e25-ec7468da696c",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-16T06:50:31.004635+00:00",
+      "dau": 123,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 348,
+      "export_events": 34,
+      "admin_logins": 0
+    },
+    {
+      "id": "62275863-e401-4a91-80cf-b22ab52700f4",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-17T06:50:31.004635+00:00",
+      "dau": 137,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 337,
+      "export_events": 33,
+      "admin_logins": 2
+    },
+    {
+      "id": "04c55b82-b93e-4379-8e43-a9ac6bebbad9",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-18T06:50:31.004635+00:00",
+      "dau": 139,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 346,
+      "export_events": 34,
+      "admin_logins": 2
+    },
+    {
+      "id": "a9a1e529-50fc-4df8-a424-d37d0846426e",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-19T06:50:31.004635+00:00",
+      "dau": 126,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 390,
+      "export_events": 39,
+      "admin_logins": 0
+    },
+    {
+      "id": "80f36fc6-af5c-4218-955d-3d1439a70fff",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-20T06:50:31.004635+00:00",
+      "dau": 121,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 384,
+      "export_events": 38,
+      "admin_logins": 0
+    },
+    {
+      "id": "c7571394-f046-4c00-a6fd-d5e7269c5e52",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-21T06:50:31.004635+00:00",
+      "dau": 144,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 337,
+      "export_events": 33,
+      "admin_logins": 0
+    },
+    {
+      "id": "e8854970-5c93-4b71-9ab0-f9d5cdda0e17",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-22T06:50:31.004635+00:00",
+      "dau": 147,
+      "license_utilization_pct": 0.7,
+      "core_feature_clicks": 329,
+      "export_events": 32,
+      "admin_logins": 0
+    },
+    {
+      "id": "e9300da6-8a40-4622-a4a9-a3ad4b1c66e3",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-23T06:50:31.004635+00:00",
+      "dau": 64,
+      "license_utilization_pct": 0.4,
+      "core_feature_clicks": 85,
+      "export_events": 8,
+      "admin_logins": 0
+    },
+    {
+      "id": "95eb4fc9-2fec-43b0-b3e6-345e42836e01",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-24T06:50:31.004635+00:00",
+      "dau": 69,
+      "license_utilization_pct": 0.4,
+      "core_feature_clicks": 131,
+      "export_events": 13,
+      "admin_logins": 0
+    },
+    {
+      "id": "03a58a48-4566-47a2-b218-914cad1da352",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-25T06:50:31.004635+00:00",
+      "dau": 63,
+      "license_utilization_pct": 0.4,
+      "core_feature_clicks": 70,
+      "export_events": 7,
+      "admin_logins": 0
+    },
+    {
+      "id": "46fcfdb5-3a0d-4ef2-97ff-fcfed3d63f2b",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-26T06:50:31.004635+00:00",
+      "dau": 63,
+      "license_utilization_pct": 0.4,
+      "core_feature_clicks": 95,
+      "export_events": 9,
+      "admin_logins": 0
+    },
+    {
+      "id": "6ed25ec4-c760-4274-b0a6-e96e08773824",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-27T06:50:31.004635+00:00",
+      "dau": 53,
+      "license_utilization_pct": 0.4,
+      "core_feature_clicks": 135,
+      "export_events": 13,
+      "admin_logins": 0
+    },
+    {
+      "id": "b5c87988-a07c-4bc1-9688-9cd56649f493",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-28T06:50:31.004635+00:00",
+      "dau": 57,
+      "license_utilization_pct": 0.4,
+      "core_feature_clicks": 139,
+      "export_events": 13,
+      "admin_logins": 0
+    },
+    {
+      "id": "7a8b8691-448e-4aba-9b3d-f505cc8994a0",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-29T06:50:31.004635+00:00",
+      "dau": 44,
+      "license_utilization_pct": 0.4,
+      "core_feature_clicks": 127,
+      "export_events": 12,
+      "admin_logins": 0
+    },
+    {
+      "id": "a49ebdde-b6d3-45e2-8ed1-f4df937b504d",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-30T06:50:31.004635+00:00",
+      "dau": 80,
+      "license_utilization_pct": 0.4,
+      "core_feature_clicks": 71,
+      "export_events": 7,
+      "admin_logins": 0
+    }
+  ],
+  "support_tickets": [
+    {
+      "id": "b8e84892-b66a-446b-ad6b-2541544b8868",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "created_at": "2026-08-16T06:50:31.004635+00:00",
+      "resolved_at": null,
+      "severity": "HIGH",
+      "category": "BUG",
+      "subject": "Data export failing consistently",
+      "status": "OPEN",
+      "csat_score": null
+    }
+  ],
+  "customer_feedbacks": [
+    {
+      "id": "29c58c69-7b64-4bb8-a3b5-bad04e1d76a2",
+      "customer_id": "d0749c82-aba7-4b66-a70c-b6e097b2f76a",
+      "timestamp": "2026-08-20T06:50:31.004635+00:00",
+      "channel": "NPS_SURVEY",
+      "score": 3,
+      "sentiment": "NEGATIVE",
+      "feedback_text": "Frustrated with reporting bugs. The export hasn't worked for days."
+    }
+  ]
+}

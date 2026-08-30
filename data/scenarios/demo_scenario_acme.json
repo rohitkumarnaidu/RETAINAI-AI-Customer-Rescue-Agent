@@ -1,0 +1,51 @@
+{
+  "scenario_id": "SCENARIO-ACME-RESCUE",
+  "title": "Acme Corp End-to-End Rescue Story",
+  "customer": {
+    "id": "cust-acme-101",
+    "name": "Acme Corp",
+    "domain": "acme.com",
+    "tier": "Enterprise",
+    "mrr": 12500.0,
+    "csm_name": "Sarah Jenkins",
+    "renewal_date": "2026-10-30",
+    "initial_health": 88.0,
+    "initial_risk": "LOW"
+  },
+  "phase_1_baseline": {
+    "days": "1-30",
+    "avg_dau": 125,
+    "license_utilization_pct": 88.5,
+    "open_tickets": 0,
+    "csat_score": 5
+  },
+  "phase_2_friction": {
+    "days": "31-45",
+    "ticket": {
+      "id": "TICK-101",
+      "severity": "HIGH",
+      "category": "BUG",
+      "subject": "CSV Export fails for datasets > 10,000 rows",
+      "status": "OPEN"
+    },
+    "feedback": {
+      "id": "FEED-201",
+      "channel": "CSAT_SURVEY",
+      "score": 2,
+      "sentiment": "NEGATIVE",
+      "text": "Reporting export failure prevented our team from generating end-of-month executive decks."
+    },
+    "dropped_dau": 42,
+    "dropped_license_utilization_pct": 32.0
+  },
+  "phase_3_intervention": {
+    "action_type": "ENGINEERING_ESCALATION_AND_EXECUTIVE_CHECKIN",
+    "proposed_plan": "Escalate CSV export fix to Sprint 1; schedule technical check-in with VP of Product."
+  },
+  "phase_4_post_recovery": {
+    "recovered_dau": 118,
+    "recovered_license_utilization_pct": 86.0,
+    "final_health": 82.0,
+    "final_risk": "LOW"
+  }
+}

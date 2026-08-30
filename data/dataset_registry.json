@@ -1,0 +1,35 @@
+[
+  {
+    "name": "IT-helpdesk-synthetic-tickets",
+    "source": "Console-AI (Hugging Face)",
+    "url": "https://huggingface.co/datasets/Console-AI/IT-helpdesk-synthetic-tickets",
+    "license": "MIT",
+    "license_url": "https://huggingface.co/datasets/Console-AI/IT-helpdesk-synthetic-tickets",
+    "purpose": "Provides realistic text descriptions and categories for SaaS support tickets.",
+    "status": "selected",
+    "fields_used": ["subject", "description", "category", "priority"],
+    "notes": "Used as the baseline text pool for generating synthetic support tickets in the RETAINAI timeline."
+  },
+  {
+    "name": "IBM Telco Customer Churn",
+    "source": "IBM / Kaggle / Hugging Face",
+    "url": "https://huggingface.co/datasets/aai510-group1/telco-customer-churn",
+    "license": "Open Data Commons Attribution License (ODC-BY)",
+    "license_url": "https://opendatacommons.org/licenses/by/1-0/",
+    "purpose": "Provides baseline statistical distributions for tenure vs. churn rates.",
+    "status": "candidate",
+    "fields_used": [],
+    "notes": "Did not directly integrate raw rows due to lack of longitudinal usage data, but used for structural insight."
+  },
+  {
+    "name": "RETAINAI Synthetic SaaS Lifecycle Dataset",
+    "source": "Internal RETAINAI Synthetic Generation Script",
+    "url": "local://scripts/data/build_retainai_dataset.py",
+    "license": "MIT",
+    "license_url": "local://LICENSE",
+    "purpose": "Primary source for longitudinal customer behavior, support interactions, and usage telemetry mapped to the RETAINAI domain.",
+    "status": "selected",
+    "fields_used": ["customer", "usage", "support", "feedback", "risk", "outcomes"],
+    "notes": "Generated deterministically based on behavioral archetypes, integrating sampled text from public datasets where applicable."
+  }
+]
