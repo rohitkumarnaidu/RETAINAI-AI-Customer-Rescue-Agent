@@ -21,11 +21,25 @@ try:
 except ImportError:
     jwt = None
 
+import warnings
+import logging as _logging
+
+# Silence passlib/bcrypt "trapped" noise on bcrypt 4.x (passlib expects <4.1, bcrypt 4 removed __about__)
+_logging.getLogger("passlib").setLevel(_logging.ERROR)
+warnings.filterwarnings("ignore", category=UserWarning, module="passlib.*")
+
 try:
     from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    # In DEMO_MODE we don't need bcrypt at all — skip init to avoid trapped warning entirely
+    # Only init when auth is actually enabled; otherwise fallback to plain compare is fine
+    _tmp_demo = os.getenv("DEMO_MODE", "true").lower() == "true"
+    _tmp_auth = os.getenv("AUTH_ENABLED", "false").lower() == "true"
+    if _tmp_demo and not _tmp_auth:
+        pwd_context = None  # type: ignore
+    else:
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 except Exception:
-    pwd_context = None
+    pwd_context = None  # type: ignore
 
 from retainai.config.settings import settings
 
@@ -44,16 +58,16 @@ _DEMO_USERS = {
     "viewer@retainai.io": {"password_hash": None, "role": "viewer", "tenant": "retainai", "customer_ids": None},
 }
 # Pre-hash demo passwords if passlib available (hardened: handle bcrypt incompatibility)
-if pwd_context:
+# Skip entirely in DEMO_MODE (no hashing needed) — avoids bcrypt 72-byte + version warnings
+if pwd_context and not (os.getenv("DEMO_MODE", "true").lower() == "true" and os.getenv("AUTH_ENABLED", "false").lower() != "true"):
     for email in list(_DEMO_USERS.keys()):
         try:
             # password = "demo123" for all
-            _DEMO_USERS[email]["password_hash"] = pwd_context.hash("demo123")
+            _DEMO_USERS[email]["password_hash"] = pwd_context.hash("demo123")  # type: ignore
         except Exception as e:
             # Fallback: disable passlib for demo if bcrypt misconfigured (still allow plain compare)
-            import logging
-            logging.getLogger("retainai.auth").warning(f"passlib hash failed ({e}), falling back to plain comparison")
-            pwd_context = None
+            _logging.getLogger("retainai.auth").debug(f"passlib hash skipped ({e}), using plain comparison")
+            pwd_context = None  # type: ignore
             break
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
