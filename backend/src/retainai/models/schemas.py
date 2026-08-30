@@ -183,6 +183,8 @@ class OutcomeCreateRequest(BaseModel):
     usage_after: float = 0.0
     customer_response: Optional[str] = None
     notes: Optional[str] = None
+    dataset_name: Optional[str] = None
+    source_dataset: Optional[str] = None
 
 
 class OutcomeSchema(BaseModel):

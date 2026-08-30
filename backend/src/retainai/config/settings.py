@@ -1,7 +1,8 @@
 """Application Settings and Configuration."""
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator
+import json
 
 
 class HealthWeights(BaseSettings):
@@ -37,6 +38,27 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     CORS_ORIGINS: list[str] = Field(default=["http://localhost:5173", "http://127.0.0.1:5173"])
     DEMO_MODE: bool = True
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return []
+            # Try JSON array first: ["http://...","http://..."]
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return [str(x).strip() for x in parsed if str(x).strip()]
+            except Exception:
+                pass
+            # Fallback: comma-separated string (Render dashboard often sets as comma list without JSON)
+            # Also handle single value without comma
+            if "," in v:
+                return [s.strip() for s in v.split(",") if s.strip()]
+            return [v]
+        return v
     LOG_LEVEL: str = "INFO"
     AUTH_ENABLED: bool = False
     AUTH_SECRET: str = "retainai-dev-secret-change-in-prod"

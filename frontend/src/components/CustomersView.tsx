@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useMemo} from 'react';
-import { getCustomers } from '../services/api';
+import { getCustomers, getDatasets } from '../services/api';
 import { RiskBadge, HealthRing } from './RiskBadge';
 import { Card, ErrorState, SkeletonCard, EmptyState } from './ui';
 import { CsvUpload } from './CsvUpload';
@@ -11,7 +11,9 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void; initia
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState<string|null>(null);
   const [q,setQ]=useState(''); const [seg,setSeg]=useState('ALL'); const [risk,setRisk]=useState('ALL'); const [sort,setSort]=useState<'name'|'health'|'arr'>('name');
-  const [dataset,setDataset]=useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
+  const [dataset,setDataset]=useState<string>('all');
+  const [availableDatasets, setAvailableDatasets] = useState<{canonical:any[];generic:any[]}>({canonical:[],generic:[]});
+  useEffect(()=>{ getDatasets().then(ds=> setAvailableDatasets({canonical: ds.canonical||[], generic: ds.generic||[]})).catch(()=>{}); },[]);
 
   // Phase 5: tenant-aware cache key — isolates per tenant without react-query/SWR
   const tenantId = typeof window !== 'undefined' ? (localStorage.getItem('retainai_tenant_id') || localStorage.getItem('tenant_id') || localStorage.getItem('tenantId') || 'demo-tenant-001') : 'demo-tenant-001';
@@ -27,9 +29,10 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void; initia
     if(seg!=='ALL') out=out.filter(c=>c.segment===seg);
     if(risk!=='ALL') out=out.filter(c=>c.risk_level===risk);
     if(dataset!=='all'){
-      if(dataset==='usage') out=out.filter(c=> (c.health_score??100) < 75);
-      else if(dataset==='support') out=out.filter(c=> ['AT_RISK','HIGH_RISK','CRITICAL'].includes(c.risk_level));
-      else if(dataset==='feedback') out=out.filter(c=> (c.health_score??100) >=40 && (c.health_score??100) <=85);
+      if(availableDatasets.generic.some((g:any)=> g.dataset_name===dataset)) out=out; // generic: show all for now (any dataset view)
+      else if(dataset==='usage' || dataset==='usage_events') out=out.filter(c=> (c.health_score??100) < 75);
+      else if(dataset==='support' || dataset==='support_tickets') out=out.filter(c=> ['AT_RISK','HIGH_RISK','CRITICAL'].includes(c.risk_level));
+      else if(dataset==='feedback' || dataset==='customer_feedbacks') out=out.filter(c=> (c.health_score??100) >=40 && (c.health_score??100) <=85);
     }
     if(sort==='health') out.sort((a,b)=>a.health_score-b.health_score);
     else if(sort==='arr') out.sort((a,b)=>b.arr-a.arr);
@@ -63,8 +66,15 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void; initia
             <p className="text-xs text-slate-500 mt-0.5 leading-relaxed truncate" title={`${filtered.length} of ${customers.length}`}>{filtered.length} of {customers.length} · Search, filter, sort — real backend data · Updated {new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
           </div>
           <div className="flex flex-wrap gap-2 mb-2">
-            {(['all','customers','usage','support','feedback'] as const).map(f=>(
-              <button key={f} onClick={()=> setDataset(f)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${dataset===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f==='all' ? 'All 4' : f}</button>
+            <button onClick={()=> setDataset('all')} className={`px-3 py-1 rounded-full text-xs font-mono border ${dataset==='all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>All {availableDatasets.canonical.length + availableDatasets.generic.length || 4}</button>
+            {availableDatasets.canonical.map((d:any)=>(
+              <button key={d.dataset_name} onClick={()=> setDataset(d.dataset_name)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${dataset===d.dataset_name ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{d.display || d.dataset_name}</button>
+            ))}
+            {availableDatasets.generic.map((d:any)=>(
+              <button key={d.dataset_name} onClick={()=> setDataset(d.dataset_name)} className={`px-3 py-1 rounded-full text-xs font-mono border ${dataset===d.dataset_name ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-white'}`}>{d.display || d.dataset_name}</button>
+            ))}
+            {availableDatasets.canonical.length===0 && availableDatasets.generic.length===0 && (['customers','usage','support','feedback'] as const).map(f=>(
+              <button key={f} onClick={()=> setDataset(f)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${dataset===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f}</button>
             ))}
             <span className="text-xs text-slate-500 self-center ml-1">{dataset==='all' ? 'all datasets' : dataset} · {filtered.length} shown</span>
           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { uploadCustomersCsv, createCustomer, getCustomerCsvTemplate } from '../services/api';
+import { uploadCustomersCsv, createCustomer, getCustomerCsvTemplate, uploadGenericDataset } from '../services/api';
 import { saveUpload } from '../services/uploadHistory';
 import { Card, SectionHeader } from './ui';
 import { Upload, Download, FileSpreadsheet, X, CheckCircle2, AlertTriangle, Plus, Loader2, UserPlus, RefreshCw } from 'lucide-react';
@@ -202,7 +202,19 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
       }
       const remapped = showMapping ? buildRemappedFile() : null;
       const fileToUpload = remapped || file;
-      const res = await uploadCustomersCsv(fileToUpload);
+      // Detect generic: if headers don't contain retain 'name' and not telemetry, upload as any dataset
+      const lowerHeaders = (remapped ? (await remapped.text()).split('\n')[0] : previewHeaders.join(',')).toLowerCase();
+      const isGeneric = !previewHeaders.map(h=>h.toLowerCase()).includes('name') && !['timestamp','severity','sentiment','event_type'].some(k=> lowerHeaders.includes(k)) && previewHeaders.length>0;
+      let res:any;
+      if(isGeneric && !showMapping){
+        // Any CSV with arbitrary headers → generic dataset
+        const dsName = file.name.replace(/\.csv$/i,'').replace(/[^a-zA-Z0-9_]/g,'_').slice(0,40) || 'custom_dataset';
+        res = await uploadGenericDataset(fileToUpload, dsName);
+        // map generic response to customers-like shape for toast
+        res = { created: (res as any).rows || 0, skipped: 0, total_rows: fullRows.length, message: `Generic dataset ${(res as any).dataset_name} — ${(res as any).rows} rows` } as any;
+      } else {
+        res = await uploadCustomersCsv(fileToUpload);
+      }
       setResult(res);
       // — Persist complete CSV to Data Hub folder structure (tenant-isolated) —
       try {

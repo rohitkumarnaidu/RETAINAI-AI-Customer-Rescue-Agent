@@ -232,22 +232,29 @@ async def seed_demo_data(tenant_id: str | None = None, tenant_name: str | None =
             )
             db.add(fb)
 
-        # Seed initial Experience Memory Bank per-tenant
+        # Seed initial Experience Memory Bank per-tenant — fixed to be consistent and dataset-aware
         mem1 = ExperienceMemory(
             id="mem-001",
             tenant_id=demo_tid,
+            pattern="Enterprise :: ENGINEERING_ESCALATION_AND_EXECUTIVE_CHECKIN",
             context_pattern="Enterprise Account CSV Export Friction & Usage Drop",
             customer_segment="Enterprise",
             risk_pattern="HIGH_RISK_SUPPORT_BUG_FRICTION",
             signals=["UNRESOLVED_CRITICAL_TICKET", "USAGE_DECLINE", "NEGATIVE_FEEDBACK"],
             recommended_strategy="ENGINEERING_ESCALATION_AND_EXECUTIVE_CHECKIN",
+            recommended_intervention="ENGINEERING_ESCALATION_AND_EXECUTIVE_CHECKIN",
             actual_action="Escalate fix to Sprint Priority 1; 1-on-1 Product Head checkin",
             observed_outcome="Customer usage recovered +44 points within 14 days of patch deployment.",
             confidence=0.92,
             validation_status=ValidationStatus.VALIDATED,
+            status="VALIDATED",
             success_count=4,
             failure_count=0,
+            sample_size=4,
+            success_rate=1.0,
             evidence_ids=["TICK-101", "FEED-201"],
+            source_intervention_ids=["inv_hero_001"],
+            contexts=[{"segment": "Enterprise", "action_type": "ENGINEERING_ESCALATION_AND_EXECUTIVE_CHECKIN", "dataset_name": "customers", "health_delta": 44}],
         )
         db.add(mem1)
 

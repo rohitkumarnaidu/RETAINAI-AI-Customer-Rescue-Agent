@@ -162,12 +162,22 @@ class AgentTools:
             SearchEvidenceInput(customer_id=customer_id, days=days)
             self._authorize_customer_scope(customer_id)
             await self._authorize_tenant_for_customer(customer_id)
-            # Timeout guard with wait_for (5s)
+            # Timeout guard with wait_for (5s) + any generic datasets
             import asyncio
             usage = await asyncio.wait_for(self.telemetry_repo.get_usage_events(customer_id, days=days), timeout=TOOL_TIMEOUT_SECONDS)
             tickets = await asyncio.wait_for(self.telemetry_repo.get_support_tickets(customer_id, days=days), timeout=TOOL_TIMEOUT_SECONDS)
             feedback = await asyncio.wait_for(self.telemetry_repo.get_feedback_entries(customer_id, days=days), timeout=TOOL_TIMEOUT_SECONDS)
             events = await asyncio.wait_for(self.telemetry_repo.get_account_events(customer_id, days=days), timeout=TOOL_TIMEOUT_SECONDS)
+            # Any generic datasets for this customer
+            generic_any = []
+            try:
+                from sqlalchemy import select as _sel
+                from retainai.db.models import GenericRecord
+                g_res = await self.session.execute(_sel(GenericRecord).where(GenericRecord.tenant_id == self.tenant_id).where(GenericRecord.customer_id == customer_id).limit(20))
+                for gr in g_res.scalars().all():
+                    generic_any.append({"id": gr.id, "dataset": gr.dataset_name, "data": gr.row_data})
+            except Exception:
+                pass
             self._log_tool_call("search_customer_evidence", {"customer_id": customer_id, "days": days}, "SUCCESS", int((time.time()-start)*1000))
             return {
                 "usage_events": [
@@ -210,6 +220,7 @@ class AgentTools:
                     }
                     for e in events
                 ],
+                "generic_datasets": generic_any,
             }
         except Exception as e:
             self._log_tool_call("search_customer_evidence", {"customer_id": customer_id}, "FAILED", int((time.time()-start)*1000), error=str(e))

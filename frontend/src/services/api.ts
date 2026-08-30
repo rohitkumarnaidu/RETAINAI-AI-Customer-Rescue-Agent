@@ -79,8 +79,14 @@ export const getCustomerInterventions = async (id:string): Promise<Intervention[
 export const getCustomerEvidence = async (id:string): Promise<any[]> => { const r=await api.get<any[]>(`/customers/${id}/evidence`); return r.data; };
 export const resolveEvidence = async (evidenceId:string): Promise<any> => { const r=await api.get<any>(`/evidence/${evidenceId}`); return r.data; };
 export const getCustomerMemory = async (id:string): Promise<any[]> => { const r=await api.get<any[]>(`/customers/${id}/memory`); return r.data; };
-export const getExperienceMemories = async (): Promise<ExperienceMemory[]> => { try{ const r=await api.get<ExperienceMemory[]>('/learning/memories'); return r.data;} catch{ const r=await api.get<ExperienceMemory[]>('/experience-memory'); return r.data; } };
-export const getLearningOverview = async (): Promise<any> => { const r=await api.get<any>('/learning'); return r.data; };
+export const getExperienceMemories = async (dataset?: string): Promise<ExperienceMemory[]> => {
+  const params = dataset && dataset !== 'all' ? { dataset } : {};
+  try{ const r=await api.get<ExperienceMemory[]>('/learning/memories', { params }); return r.data;} catch{ const r=await api.get<ExperienceMemory[]>('/experience-memory', { params }); return r.data; }
+};
+export const getLearningOverview = async (dataset?: string): Promise<any> => {
+  const params = dataset && dataset !== 'all' ? { dataset } : {};
+  const r=await api.get<any>('/learning', { params }); return r.data;
+};
 export const getAllInterventions = async (): Promise<Intervention[]> => {
   const r=await api.get<Intervention[]>('/interventions');
   if(r.data?.length) return r.data;

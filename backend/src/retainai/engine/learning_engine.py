@@ -56,6 +56,8 @@ class LearningEngine:
         after_metrics: Optional[Dict[str, Any]] = None,
         observations: Optional[List[str]] = None,
         evidence_ids: Optional[List[str]] = None,
+        dataset_name: Optional[str] = None,
+        source_dataset: Optional[str] = None,
     ) -> InterventionOutcome:
         health_delta = health_after - health_before
 
@@ -117,6 +119,15 @@ class LearningEngine:
             confidence=confidence,
         )
 
+        # Resolve dataset provenance (any dataset, not just 4 canonical) — explicit param or inference
+        effective_dataset = dataset_name or source_dataset
+        if not effective_dataset and notes and isinstance(notes, str):
+            # try extract dataset hint from notes like "dataset:foo"
+            import re as _re
+            m = _re.search(r"dataset\s*[:=]\s*([a-zA-Z0-9_]+)", notes, _re.I)
+            if m:
+                effective_dataset = m.group(1)
+
         intervention = await self.intervention_repo.get_by_id(intervention_id)
         if intervention:
             outcome.customer_id = intervention.customer_id
@@ -131,6 +142,11 @@ class LearningEngine:
                     self.memory_repo = MemoryRepository(self.db, tenant_id=resolved_tenant)
             if not outcome.evidence_ids:
                 outcome.evidence_ids = [intervention.id]
+            # Persist dataset provenance inside outcome notes/metadata for audit
+            if effective_dataset and not outcome.notes:
+                outcome.notes = f"dataset:{effective_dataset}"
+            elif effective_dataset and outcome.notes and "dataset:" not in outcome.notes:
+                outcome.notes = f"{outcome.notes} | dataset:{effective_dataset}"
             # Idempotency: if outcome already exists for this intervention, return existing (S64)
             existing_outcome = await self.intervention_repo.get_outcome_by_intervention(intervention_id)
             if existing_outcome is not None:
@@ -146,14 +162,37 @@ class LearningEngine:
                         return existing
                 raise
             # Learning candidate pipeline: always create candidate; validation gate decides promotion
-            await self._create_learning_candidate(intervention, outcome)
+            # Infer dataset from generic records if not explicitly given (any dataset support)
+            if not effective_dataset:
+                try:
+                    from retainai.db.models import GenericRecord
+                    # check if any evidence_id is a generic record for this customer/tenant
+                    if outcome.evidence_ids:
+                        for eid in outcome.evidence_ids[:3]:
+                            res = await self.db.execute(select(GenericRecord.dataset_name).where(GenericRecord.id == eid).limit(1))
+                            ds = res.scalar_one_or_none()
+                            if ds:
+                                effective_dataset = ds
+                                break
+                    if not effective_dataset:
+                        # fallback: most recent generic dataset for tenant
+                        from retainai.db.models import GenericDataset
+                        gq = select(GenericDataset.dataset_name).where(GenericDataset.tenant_id == resolved_tenant).order_by(GenericDataset.created_at.desc()).limit(1)
+                        res2 = await self.db.execute(gq)
+                        ds2 = res2.scalar_one_or_none()
+                        # only use if pattern hints generic? just leave None to stay canonical-agnostic
+                        # Keep None so filtering still works via pattern; dataset provenance is optional for any
+                        pass
+                except Exception:
+                    pass
+            await self._create_learning_candidate(intervention, outcome, dataset_name=effective_dataset)
 
         return outcome
 
     async def _create_learning_candidate(
-        self, intervention: Intervention, outcome: InterventionOutcome
+        self, intervention: Intervention, outcome: InterventionOutcome, dataset_name: Optional[str] = None
     ):
-        """Create a learning candidate and run validation gate."""
+        """Create a learning candidate and run validation gate — dataset-aware for any N datasets."""
         candidate_id = f"cand_{intervention.customer_id[:5]}_{int(datetime.now(timezone.utc).timestamp())}_{__import__('uuid').uuid4().hex[:4]}"
         segment = "Enterprise"
         try:
@@ -164,9 +203,18 @@ class LearningEngine:
         except Exception:
             segment = "Enterprise"
 
-        # Tenant-scoped pattern
+        # Tenant-scoped pattern — dataset-agnostic but provenance stored in context_json for any dataset filter
         tid = self._resolve_tenant(intervention)
         pattern = f"{segment} :: {intervention.action_type}"
+        # Determine dataset provenance: explicit param, or infer from outcome/intervention, or None (canonical)
+        eff_dataset = dataset_name
+        if not eff_dataset:
+            try:
+                eff_dataset = (outcome.notes or "").split("dataset:")[-1].split("|")[0].split()[0] if "dataset:" in (outcome.notes or "") else None
+                if eff_dataset and len(eff_dataset) > 80:
+                    eff_dataset = eff_dataset[:80]
+            except Exception:
+                eff_dataset = None
         context_json = {
             "segment": segment,
             "action_type": intervention.action_type,
@@ -175,6 +223,8 @@ class LearningEngine:
             "health_delta": outcome.health_delta,
             "intervention_title": intervention.title,
             "tenant_id": tid,
+            "dataset_name": eff_dataset,
+            "source_dataset": eff_dataset,
         }
         # Calculate confidence with sample awareness
         # Start low for single observation, increase with repetitions
@@ -282,18 +332,23 @@ class LearningEngine:
         memory_id = f"mem_val_{candidate.customer_id[:5]}_{int(datetime.now(timezone.utc).timestamp())}"
         # Fetch segment for memory
         segment = candidate.context_json.get("segment", "Enterprise")
+        eff_dataset = candidate.context_json.get("dataset_name") or candidate.context_json.get("source_dataset")
+        # Ensure context_json propagated with dataset provenance for any dataset
+        mem_context = dict(candidate.context_json) if isinstance(candidate.context_json, dict) else {}
+        if eff_dataset:
+            mem_context["dataset_name"] = eff_dataset
         memory = ExperienceMemory(
             id=memory_id,
             tenant_id=tid,
             pattern=pattern,
-            context_pattern=f"{segment} Account Recovery — {candidate.intervention_type}",
+            context_pattern=f"{segment} Account Recovery — {candidate.intervention_type}" + (f" [{eff_dataset}]" if eff_dataset else ""),
             customer_segment=segment,
             risk_pattern=candidate.intervention_type or "HIGH_RISK_SUPPORT_BUG_FRICTION",
             signals=["UNRESOLVED_CRITICAL_TICKET", "USAGE_DECLINE", "NEGATIVE_FEEDBACK"],
             recommended_strategy=candidate.intervention_type,
             recommended_intervention=candidate.intervention_type,
             actual_action=candidate.context_json.get("intervention_title", candidate.intervention_type),
-            observed_outcome=f"Health recovered {candidate.observed_outcome} (validation sample_size={candidate.sample_size})",
+            observed_outcome=f"Health recovered {candidate.observed_outcome} (validation sample_size={candidate.sample_size})" + (f" — dataset:{eff_dataset}" if eff_dataset else ""),
             confidence=candidate.confidence,
             validation_status=ValidationStatus.VALIDATED,
             status="VALIDATED",
@@ -303,7 +358,7 @@ class LearningEngine:
             success_rate=1.0,
             evidence_ids=candidate.evidence_ids,
             source_intervention_ids=candidate.source_intervention_ids,
-            contexts=[candidate.context_json],
+            contexts=[mem_context],
             last_observed=datetime.now(timezone.utc),
             version="v2.1",
         )

@@ -21,7 +21,15 @@ type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|
 
 export function App() {
   const { user, tenantId, logout, isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>('command');
+  // Persist tab across refresh; default to Onboarding (fixes login landing on Command Center)
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    try {
+      const stored = localStorage.getItem('retainai_activeTab') as Tab | null;
+      const valid: Tab[] = ['command','customers','customer360','investigations','interventions','learning','audit','onboarding','settings','analytics','datahub','chat'];
+      if (stored && valid.includes(stored)) return stored;
+    } catch {}
+    return 'onboarding';
+  });
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -33,6 +41,11 @@ export function App() {
   const [hasBypassed, setHasBypassed] = useState<boolean>(() => {
     try { return localStorage.getItem('retainai_bypass') === '1'; } catch { return false; }
   });
+
+  // Persist activeTab so refresh keeps current page (not forced back to Command Center)
+  useEffect(()=>{
+    try { localStorage.setItem('retainai_activeTab', activeTab); } catch {}
+  }, [activeTab]);
 
   useEffect(()=>{ const id=setInterval(()=>setNow(new Date()),60000); return ()=>clearInterval(id)},[]);
   useEffect(()=>{
@@ -65,12 +78,13 @@ export function App() {
     return ()=>{cancelled=true};
   },[activeTab]);
 
-  // Auto-land on Onboarding when tenant has 0 customers (fresh org) — fixes refresh starting at Command Center
+  // Auto-land on Onboarding when tenant has 0 customers (fresh org) — fixes login/refresh starting at Command Center
   useEffect(()=>{
-    if (hasCustomers===false && activeTab==='command') {
+    if (hasCustomers===false && activeTab!=='onboarding') {
       setActiveTab('onboarding');
+      try { localStorage.setItem('retainai_activeTab','onboarding'); } catch {}
     }
-  },[hasCustomers, activeTab]);
+  },[hasCustomers]);
 
   const handleSelectCustomer = (customerId: string) => {
     setSelectedCustomerId(customerId);
@@ -122,9 +136,11 @@ export function App() {
         initialMode="signup"
         onSuccess={() => {
           setHasBypassed(false);
+          try { localStorage.setItem('retainai_activeTab','onboarding'); } catch {}
+          setActiveTab('onboarding');
           setToast('Authenticated — tenant ' + (tenantId || ''));
           setTimeout(() => setToast(null), 2000);
-          window.location.reload();
+          // no hard reload — AuthContext already hydrated; hard reload would reset tab to command before hasCustomers fetch
         }}
       />
     );
@@ -173,7 +189,7 @@ export function App() {
               <Upload className="w-3.5 h-3.5 shrink-0" /> Import
             </button>
             {isAuthenticated && user ? (
-              <button onClick={() => { try { localStorage.removeItem('retainai_bypass'); } catch {}; logout(); window.location.reload(); }} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50 whitespace-nowrap shrink-0">
+              <button onClick={() => { try { localStorage.removeItem('retainai_bypass'); localStorage.setItem('retainai_activeTab','onboarding'); } catch {}; logout(); window.location.reload(); }} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50 whitespace-nowrap shrink-0">
                 <LogOut className="w-3.5 h-3.5 shrink-0" /> <span className="hidden sm:inline">Logout</span>
               </button>
             ) : (
@@ -258,7 +274,7 @@ export function App() {
           )}
           {activeTab==='command' && <CommandCenter onSelectCustomer={handleSelectCustomer} />}
           {activeTab==='customers' && <CustomersView onSelectCustomer={handleSelectCustomer} initialShowImport={customersImportOpen} onImportConsumed={()=>setCustomersImportOpen(false)} />}
-          {activeTab==='customer360' && (selectedCustomerId ? <Customer360 customerId={selectedCustomerId} /> : <div className="bg-white border border-dashed border-slate-200 rounded-xl p-8 text-center"><div className="text-sm font-semibold">No customer selected</div><div className="text-xs text-slate-500 mt-1">Select an account from Command Center or Customers, or import your own data via Onboarding.</div><div className="flex items-center justify-center gap-2 mt-3"><button onClick={()=>setActiveTab('command')} className="bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm">Go to Command Center</button><button onClick={()=>setActiveTab('onboarding')} className="border border-slate-200 bg-white px-4 py-2 rounded-lg text-sm">Onboarding</button></div></div>)}
+          {activeTab==='customer360' && (selectedCustomerId ? <Customer360 customerId={selectedCustomerId} onNavigate={(tab: Tab)=>{ setActiveTab(tab); window.scrollTo({top:0, behavior:'smooth'}); }} /> : <div className="bg-white border border-dashed border-slate-200 rounded-xl p-8 text-center"><div className="text-sm font-semibold">No customer selected</div><div className="text-xs text-slate-500 mt-1">Select an account from Command Center or Customers, or import your own data via Onboarding.</div><div className="flex items-center justify-center gap-2 mt-3"><button onClick={()=>setActiveTab('command')} className="bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm">Go to Command Center</button><button onClick={()=>setActiveTab('onboarding')} className="border border-slate-200 bg-white px-4 py-2 rounded-lg text-sm">Onboarding</button></div></div>)}
           {activeTab==='investigations' && <InvestigationsView onSelectCustomer={handleSelectCustomer} />}
           {activeTab==='interventions' && <InterventionsView />}
           {activeTab==='learning' && <LearningView />}
@@ -281,7 +297,7 @@ export function App() {
       {showLogin && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={()=>setShowLogin(false)}>
           <div onClick={e=>e.stopPropagation()} className="w-full max-w-[480px]">
-            <LoginPage onSuccess={()=>{ setShowLogin(false); setToast('Logged in — tenant '+ (tenantId||'')); setTimeout(()=> setToast(null), 2000); window.location.reload(); }} />
+            <LoginPage onSuccess={()=>{ setShowLogin(false); try{localStorage.setItem('retainai_activeTab','onboarding');}catch{}; setActiveTab('onboarding'); setToast('Logged in — tenant '+ (tenantId||'')); setTimeout(()=> setToast(null), 2000); }} />
             <button onClick={()=>setShowLogin(false)} className="mt-3 mx-auto block text-xs text-white/80 hover:text-white">Close</button>
           </div>
         </div>

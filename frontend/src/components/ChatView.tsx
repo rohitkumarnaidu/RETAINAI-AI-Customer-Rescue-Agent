@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Send, Sparkles, BarChart3, Mail, Users, Shield, Bot, Activity, Trash2, Clock, Zap, ArrowRight } from 'lucide-react';
 import { sendChat, streamChat, getChatConversations, getChatMessages, deleteChatConversation, getCustomers } from '../services/api';
 import { Card, SectionHeader } from './ui';
+import ReactMarkdown from 'react-markdown';
 
 const AGENTS = [
   { id:'usage', label:'Usage Analyst', desc:'DAU, WAU, license', color:'bg-amber-500', icon: BarChart3 },
@@ -54,8 +55,8 @@ export const ChatView: React.FC<{ onSelectCustomer?:(id:string)=>void }> = ({onS
     setConversations(prev=>prev.filter(c=>c.id!==id));
     if(conversationId===id){ setConversationId(undefined); setMessages([]);}
   };
-  const send=async()=>{
-    const q=input.trim(); if(!q||loading) return;
+  const send=async(override?:string)=>{
+    const q=(override ?? input).trim(); if(!q||loading) return;
     setInput(''); setError(null);
     const hist=[...messages, {role:'user' as const, content:q}].slice(-8).map(m=>({role:m.role, content:m.content}));
     setMessages(prev=>[...prev, {role:'user', content:q}]);
@@ -215,11 +216,15 @@ export const ChatView: React.FC<{ onSelectCustomer?:(id:string)=>void }> = ({onS
             )}
             {messages.map((m,i)=>(
               <div key={i} className={`flex ${m.role==='user'?'justify-end':'justify-start'}`}>
-                <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${m.role==='user'?'bg-[#0F172A] text-white rounded-br-sm':'bg-white border border-slate-200 text-slate-800 rounded-bl-sm shadow-sm'}`}>
-                  {m.content}
+                <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed overflow-hidden break-words ${m.role==='user'?'bg-[#0F172A] text-white rounded-br-sm whitespace-pre-wrap':'bg-white border border-slate-200 text-slate-800 rounded-bl-sm shadow-sm'}`}>
+                  {m.role==='user' ? m.content : (
+                    <div className="markdown break-words [&_p]:my-1.5 [&_p]:leading-relaxed [&_strong]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1.5 [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:my-2 [&_li]:my-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px] [&_code]:break-all [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-auto [&_pre]:my-2 [&_pre]:text-xs">
+                      <ReactMarkdown>{m.content}</ReactMarkdown>
+                    </div>
+                  )}
                   {m.evidence_ids && m.evidence_ids.length>0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {m.evidence_ids.map(id=> <span key={id} className="text-[10px] font-mono bg-slate-900 text-white px-1.5 py-0.5 rounded-full">{id}</span>)}
+                      {m.evidence_ids.map(id=> <span key={id} className="text-[10px] font-mono bg-slate-900 text-white px-1.5 py-0.5 rounded-full">{id.slice(0,12)}</span>)}
                     </div>
                   )}
                 </div>
@@ -227,8 +232,10 @@ export const ChatView: React.FC<{ onSelectCustomer?:(id:string)=>void }> = ({onS
             ))}
             {streamingText && (
               <div className="flex justify-start">
-                <div className="max-w-[78%] bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap shadow-sm">
-                  {streamingText}<span className="inline-block w-1.5 h-3 bg-slate-900 ml-1 animate-pulse align-middle"/>
+                <div className="max-w-[78%] bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm leading-relaxed shadow-sm overflow-hidden break-words">
+                  <div className="markdown break-words [&_p]:my-1.5 [&_p]:leading-relaxed [&_strong]:font-semibold [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px] [&_code]:break-all [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-auto">
+                    <ReactMarkdown>{streamingText}</ReactMarkdown><span className="inline-block w-1.5 h-3 bg-slate-900 ml-1 animate-pulse align-middle"/>
+                  </div>
                 </div>
               </div>
             )}

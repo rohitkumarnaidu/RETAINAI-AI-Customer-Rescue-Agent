@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { getPortfolio, getCustomerTimeline, getCustomers } from '../services/api';
+import { getPortfolio, getCustomerTimeline, getCustomers, getDatasets, getDatasetRecords, deleteDataset } from '../services/api';
 import { getUploads, deleteUpload, clearUploads, type UploadEntry } from '../services/uploadHistory';
 import { Card, SectionHeader, SkeletonCard, ErrorState, EmptyState } from './ui';
 import { CsvUpload } from './CsvUpload';
@@ -25,6 +25,7 @@ export const DataHubView: React.FC<{ onSelectCustomer?: (id: string) => void }> 
   const [csvSearch, setCsvSearch] = useState('');
   const [csvPage, setCsvPage] = useState(1);
   const csvPageSize = 50;
+  const [genericDatasets, setGenericDatasets] = useState<any[]>([]);
 
   const refreshUploads = () => {
     const u = getUploads(tenantId);
@@ -88,10 +89,20 @@ export const DataHubView: React.FC<{ onSelectCustomer?: (id: string) => void }> 
     return f;
   }, [customers, usage, support, feedback, tenantId]);
 
+  const genericFolders: UploadEntry[] = useMemo(() => {
+    return genericDatasets.map((ds:any)=> {
+      const headers = ds.headers || [];
+      // create empty rows placeholder — will be fetched on demand, but show header + count
+      const rows: Record<string,string>[] = [];
+      const csvText = headers.join(',');
+      return { id:`__gen_${ds.dataset_name}`, filename:`${ds.dataset_name}_${ds.rows}_rows.csv`, uploadDate: ds.created_at || new Date().toISOString(), headers, rows, csvText, totalRows: ds.rows, created: ds.rows, skipped:0, sizeKB: ds.size_kb || 0, tenantId, backendResult:{synthetic:true, source:'generic', dataset_name: ds.dataset_name} } as UploadEntry;
+    });
+  }, [genericDatasets, tenantId]);
+
   const displayedUploads = useMemo(() => {
-    // User uploads first (newest first), then synthetic DB snapshots after
-    return [...uploads, ...syntheticFolders];
-  }, [uploads, syntheticFolders]);
+    // User uploads first, then 4 canonical synthetic, then any generic datasets
+    return [...uploads, ...syntheticFolders, ...genericFolders];
+  }, [uploads, syntheticFolders, genericFolders]);
 
   // Keep selected valid — defaults to first displayed (user upload or DB customers)
   useEffect(() => {
@@ -103,14 +114,27 @@ export const DataHubView: React.FC<{ onSelectCustomer?: (id: string) => void }> 
 
   const selectedUpload = useMemo(() => displayedUploads.find(u => u.id === selectedId) || null, [displayedUploads, selectedId]);
   const isSynthetic = Boolean(selectedUpload?.id?.startsWith('__db_'));
+  const isGeneric = Boolean(selectedUpload?.id?.startsWith('__gen_'));
+  const [genericLiveRows, setGenericLiveRows] = useState<Record<string, any>[]>([]);
+  useEffect(()=>{
+    if(isGeneric && selectedUpload){
+      const dsName = (selectedUpload.backendResult as any)?.dataset_name || selectedUpload.filename.replace('.csv','').split('_')[0];
+      getDatasetRecords(dsName, 200, 0).then(r=>{
+        setGenericLiveRows(r.rows || []);
+      }).catch(()=> setGenericLiveRows([]));
+    } else {
+      setGenericLiveRows([]);
+    }
+  }, [selectedId, isGeneric, selectedUpload]);
 
   const load = async () => {
     try {
       setLoading(true);
       setError(null);
-      const [pf, cs] = await Promise.all([getPortfolio().catch(() => null), getCustomers().catch(() => [])]);
+      const [pf, cs, ds] = await Promise.all([getPortfolio().catch(() => null), getCustomers().catch(() => []), getDatasets().catch(()=> ({canonical:[], generic:[]}))]);
       setPortfolio(pf);
       setCustomers(cs as any[]);
+      setGenericDatasets((ds as any)?.generic || []);
       const slice = (cs as any[]).slice(0, 12);
       const tls = await Promise.all(slice.map(c => getCustomerTimeline(c.id, 30).catch(() => [])));
       const flat = tls.flat().sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -127,10 +151,18 @@ export const DataHubView: React.FC<{ onSelectCustomer?: (id: string) => void }> 
 
   const filteredCustomers = customers.filter((c: any) => !q || c.name.toLowerCase().includes(q.toLowerCase()) || c.domain.toLowerCase().includes(q.toLowerCase()));
 
-  const handleDeleteUpload = (id: string, e?: React.MouseEvent) => {
+  const handleDeleteUpload = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (id.startsWith('__db_')) {
       alert('System database snapshot folders cannot be deleted — they reflect current DB state. Only your uploaded CSV folders can be deleted.');
+      return;
+    }
+    if (id.startsWith('__gen_')) {
+      const dsName = (displayedUploads.find(u=>u.id===id)?.backendResult as any)?.dataset_name || id.replace('__gen_','');
+      if (!confirm(`Delete custom dataset "${dsName}"? This removes ${displayedUploads.find(u=>u.id===id)?.totalRows||0} rows from your tenant.`)) return;
+      try{ await deleteDataset(dsName); } catch{} 
+      // also remove from local state
+      setGenericDatasets(prev=> prev.filter((d:any)=> d.dataset_name !== dsName));
       return;
     }
     if (!confirm('Delete this uploaded dataset folder? Complete CSV will be removed from Data Hub (customers remain).')) return;
@@ -153,14 +185,14 @@ export const DataHubView: React.FC<{ onSelectCustomer?: (id: string) => void }> 
     URL.revokeObjectURL(url);
   };
 
-  // Prepare complete CSV filtered + paginated for selected upload
+  // Prepare complete CSV filtered + paginated for selected upload — handles generic live rows
   const filteredRows = useMemo(() => {
     if (!selectedUpload) return [];
-    const rows = selectedUpload.rows || [];
+    const rows = isGeneric ? (genericLiveRows || []) : (selectedUpload.rows || []);
     if (!csvSearch.trim()) return rows;
     const needle = csvSearch.toLowerCase();
     return rows.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(needle)));
-  }, [selectedUpload, csvSearch]);
+  }, [selectedUpload, csvSearch, isGeneric, genericLiveRows]);
 
   const pagedRows = useMemo(() => {
     const start = (csvPage - 1) * csvPageSize;
@@ -306,8 +338,8 @@ export const DataHubView: React.FC<{ onSelectCustomer?: (id: string) => void }> 
                         </button>
                       );
                     })}
-                    {/* Synthetic live DB section */}
-                    {syntheticFolders.length>0 && <div className="text-[10px] font-mono tracking-widest text-slate-400 px-1 pt-2 flex items-center gap-1"><Database className="w-3 h-3" /> LIVE DATABASE · ALREADY PRESENT</div>}
+                    {/* Synthetic live DB section — 4 canonical */}
+                    {syntheticFolders.length>0 && <div className="text-[10px] font-mono tracking-widest text-slate-400 px-1 pt-2 flex items-center gap-1"><Database className="w-3 h-3" /> LIVE DATABASE · 4 CANONICAL</div>}
                     {syntheticFolders.map((u) => {
                       const active = selectedId === u.id;
                       const isCust = u.id==='__db_customers__';
@@ -330,6 +362,33 @@ export const DataHubView: React.FC<{ onSelectCustomer?: (id: string) => void }> 
                           <div className="flex flex-col items-center gap-1 shrink-0">
                             {active ? <ChevronDown className="w-3.5 h-3.5 text-white/60" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />}
                             <span className={`text-[10px] font-mono ${active?'text-white/40':'text-slate-300'}`}>•</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {/* Generic Any-Dataset section */}
+                    {genericFolders.length>0 && <div className="text-[10px] font-mono tracking-widest text-emerald-600 px-1 pt-3 flex items-center gap-1"><Layers className="w-3 h-3" /> CUSTOM DATASETS · ANY CSV · {genericFolders.length}</div>}
+                    {genericFolders.map((u) => {
+                      const active = selectedId === u.id;
+                      return (
+                        <button
+                          key={u.id}
+                          onClick={() => setSelectedId(u.id)}
+                          className={`w-full text-left group flex items-start gap-2.5 px-2.5 py-2.5 rounded-lg border transition ${active ? 'bg-emerald-900 text-white border-emerald-900 shadow-md' : `bg-white border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50`}`}
+                        >
+                          <div className={`mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${active ? 'bg-white/15 border-white/20' : 'bg-emerald-50 border-emerald-200'}`}>
+                            <Database className={`w-4 h-4 ${active?'text-white':'text-emerald-600'}`} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className={`text-xs font-semibold truncate flex items-center gap-1 ${active ? 'text-white' : 'text-slate-800'}`} title={u.filename}>{u.filename} <span className={`text-[10px] px-1 py-0 rounded font-mono ${active?'bg-emerald-400 text-emerald-900':'bg-emerald-600 text-white'}`}>CUSTOM</span></div>
+                            <div className={`text-[11px] font-mono truncate ${active ? 'text-white/60' : 'text-slate-500'}`}>{u.headers.slice(0, 3).join(', ')}{u.headers.length > 3 ? ` +${u.headers.length - 3}` : ''} · {u.totalRows} rows</div>
+                            <div className={`text-[11px] mt-0.5 ${active ? 'text-white/50' : 'text-slate-400'}`}>Any dataset · {(u.sizeKB).toFixed(1)}KB · tenant-isolated</div>
+                          </div>
+                          <div className="flex flex-col items-center gap-1 shrink-0">
+                            {active ? <ChevronDown className="w-3.5 h-3.5 text-white/60" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />}
+                            <span onClick={(e) => handleDeleteUpload(u.id, e as any)} className={`p-1 rounded-md hover:bg-red-50 ${active ? 'hover:bg-white/15' : ''}`} title="Delete dataset">
+                              <Trash2 className={`w-3.5 h-3.5 ${active ? 'text-white/60 hover:text-red-300' : 'text-slate-400 hover:text-red-600'}`} />
+                            </span>
                           </div>
                         </button>
                       );

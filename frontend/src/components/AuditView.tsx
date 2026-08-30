@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import { getPortfolio, getAllInterventions, getAllOutcomes, getObservability, getExperienceMemories } from '../services/api';
+import { getPortfolio, getAllInterventions, getAllOutcomes, getObservability, getExperienceMemories, getDatasets } from '../services/api';
 import { Card, ErrorState, SkeletonCard } from './ui';
 import { ScrollText, Activity, Database, Cpu } from 'lucide-react';
 
@@ -7,7 +7,9 @@ export const AuditView: React.FC = ()=>{
   const [data,setData]=useState<any>(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState<string|null>(null);
-  const [datasetFilter, setDatasetFilter] = useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
+  const [datasetFilter, setDatasetFilter] = useState<string>('all');
+  const [availableDatasets, setAvailableDatasets] = useState<{canonical:any[];generic:any[]}>({canonical:[],generic:[]});
+  useEffect(()=>{ getDatasets().then(ds=> setAvailableDatasets({canonical: ds.canonical||[], generic: ds.generic||[]})).catch(()=>{}); },[]);
 
   const load=async()=>{
     try{
@@ -73,8 +75,15 @@ export const AuditView: React.FC = ()=>{
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold leading-tight">Recent activity (chronological)</h3>
           <div className="flex flex-wrap gap-1">
-            {(['all','customers','usage','support','feedback'] as const).map(f=>(
-              <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-2 py-1 rounded-full text-[11px] font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200'}`}>{f==='all' ? 'All 4' : f}</button>
+            <button onClick={()=> setDatasetFilter('all')} className={`px-2 py-1 rounded-full text-[11px] font-mono border ${datasetFilter==='all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200'}`}>All {availableDatasets.canonical.length + availableDatasets.generic.length || 4}</button>
+            {availableDatasets.canonical.map((d:any)=>(
+              <button key={d.dataset_name} onClick={()=> setDatasetFilter(d.dataset_name)} className={`px-2 py-1 rounded-full text-[11px] font-mono border capitalize ${datasetFilter===d.dataset_name ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200'}`}>{d.display || d.dataset_name}</button>
+            ))}
+            {availableDatasets.generic.map((d:any)=>(
+              <button key={d.dataset_name} onClick={()=> setDatasetFilter(d.dataset_name)} className={`px-2 py-1 rounded-full text-[11px] font-mono border ${datasetFilter===d.dataset_name ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>{d.display || d.dataset_name}</button>
+            ))}
+            {availableDatasets.canonical.length===0 && availableDatasets.generic.length===0 && (['customers','usage','support','feedback'] as const).map(f=>(
+              <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-2 py-1 rounded-full text-[11px] font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200'}`}>{f}</button>
             ))}
           </div>
         </div>

@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import { getCustomers, getAgentRuns, getAgentRunDetail } from '../services/api';
+import { getCustomers, getAgentRuns, getAgentRunDetail, getDatasets } from '../services/api';
 import { Card, ErrorState, EmptyState, SkeletonCard } from './ui';
 import { SearchCode, ArrowUpRight, Clock, AlertTriangle } from 'lucide-react';
 
@@ -9,7 +9,9 @@ export const InvestigationsView: React.FC<{onSelectCustomer:(id:string)=>void}> 
   const [error,setError]=useState<string|null>(null);
   const [selectedRun,setSelectedRun]=useState<any>(null);
   const [detail,setDetail]=useState<any>(null);
-  const [datasetFilter, setDatasetFilter] = useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
+  const [datasetFilter, setDatasetFilter] = useState<string>('all');
+  const [availableDatasets, setAvailableDatasets] = useState<{canonical:any[];generic:any[]}>({canonical:[],generic:[]});
+  useEffect(()=>{ getDatasets().then(ds=> setAvailableDatasets({canonical: ds.canonical||[], generic: ds.generic||[]})).catch(()=>{}); },[]);
 
   const load=async()=>{
     try{
@@ -40,11 +42,13 @@ export const InvestigationsView: React.FC<{onSelectCustomer:(id:string)=>void}> 
   const filteredRuns = runs.filter((r:any)=>{
     if(datasetFilter==='all') return true;
     const txt = `${r.output_summary||''} ${r.input_summary||''} ${r.customer_name||''}`.toLowerCase();
-    if(datasetFilter==='customers') return true;
-    if(datasetFilter==='usage') return txt.includes('usage') || txt.includes('dau') || txt.includes('active') || txt.includes('decline');
-    if(datasetFilter==='support') return txt.includes('ticket') || txt.includes('support') || txt.includes('bug') || txt.includes('critical');
-    if(datasetFilter==='feedback') return txt.includes('feedback') || txt.includes('sentiment') || txt.includes('csat') || txt.includes('nps');
-    return true;
+    // generic dataset name
+    if(availableDatasets.generic.some((g:any)=> g.dataset_name===datasetFilter)) return txt.includes(datasetFilter.toLowerCase());
+    if(datasetFilter==='customers' || datasetFilter==='customers_db') return true;
+    if(datasetFilter==='usage' || datasetFilter==='usage_events') return txt.includes('usage') || txt.includes('dau') || txt.includes('active') || txt.includes('decline');
+    if(datasetFilter==='support' || datasetFilter==='support_tickets') return txt.includes('ticket') || txt.includes('support') || txt.includes('bug') || txt.includes('critical');
+    if(datasetFilter==='feedback' || datasetFilter==='customer_feedbacks') return txt.includes('feedback') || txt.includes('sentiment') || txt.includes('csat') || txt.includes('nps');
+    return txt.includes(datasetFilter.toLowerCase());
   });
 
   return (
@@ -52,10 +56,17 @@ export const InvestigationsView: React.FC<{onSelectCustomer:(id:string)=>void}> 
       <Card>
         <h2 className="text-lg font-semibold flex items-center gap-2"><SearchCode className="w-5 h-5"/> Investigations</h2>
         <p className="text-sm text-slate-600 mt-1">Agent runs — evidence gathering, root-cause synthesis, confidence. Click a run to view state history and tool calls.</p>
-        <p className="text-xs text-slate-500 mt-1">Most recent {runs.length} runs across top 20 accounts · Real backend data (AgentRun + AgentStep) · Filter by dataset below</p>
+        <p className="text-xs text-slate-500 mt-1">Most recent {runs.length} runs across top 20 accounts · Real backend data (AgentRun + AgentStep) · Filter by any dataset below</p>
         <div className="flex flex-wrap gap-1.5 mt-3">
-          {(['all','customers','usage','support','feedback'] as const).map(f=>(
-            <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f==='all' ? 'All 4' : f}</button>
+          <button onClick={()=> setDatasetFilter('all')} className={`px-3 py-1 rounded-full text-xs font-mono border ${datasetFilter==='all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>All {availableDatasets.canonical.length + availableDatasets.generic.length || 4}</button>
+          {availableDatasets.canonical.map((d:any)=>(
+            <button key={d.dataset_name} onClick={()=> setDatasetFilter(d.dataset_name)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===d.dataset_name ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{d.display || d.dataset_name}</button>
+          ))}
+          {availableDatasets.generic.map((d:any)=>(
+            <button key={d.dataset_name} onClick={()=> setDatasetFilter(d.dataset_name)} className={`px-3 py-1 rounded-full text-xs font-mono border ${datasetFilter===d.dataset_name ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-white'}`}>{d.display || d.dataset_name}</button>
+          ))}
+          {availableDatasets.canonical.length===0 && availableDatasets.generic.length===0 && (['customers','usage','support','feedback'] as const).map(f=>(
+            <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f}</button>
           ))}
           <span className="text-xs text-slate-500 self-center ml-1">{filteredRuns.length} of {runs.length} · {datasetFilter==='all' ? 'all datasets' : datasetFilter}</span>
         </div>

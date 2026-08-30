@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getPortfolio, getCustomers, getCustomerTimeline, getDatasets } from '../services/api';
+import { getPortfolio, getCustomers, getCustomerTimeline, getDatasets, replayAcmeStep } from '../services/api';
 import { RiskBadge, HealthRing } from './RiskBadge';
 import { Card, SkeletonCard, ErrorState, EmptyState } from './ui';
 import { TrendingDown, ShieldAlert, Activity, Clock, ArrowUpRight, FileSpreadsheet, Upload, MessageSquare, LifeBuoy, Users, Database } from 'lucide-react';
@@ -101,19 +101,26 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
         </Card>
       </div>
 
-      {/* 4 Datasets — live with filter All + 4 */}
+      {/* Any Datasets — live dynamic */}
       <Card>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="text-xs font-mono tracking-wide text-slate-500">LIVE DATASETS · 4 tenant-isolated · Data Hub folders</div>
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-full p-1">
-            {(['all','customers','usage','support','feedback'] as const).map(f=>(
-              <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-medium capitalize ${datasetFilter===f ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'}`}>{f==='all' ? 'All 4' : f}</button>
+          <div className="text-xs font-mono tracking-wide text-slate-500">LIVE DATASETS · {availableDatasets.canonical.length + availableDatasets.generic.length || 4} tenant-isolated · Data Hub folders {availableDatasets.generic.length ? `+ ${availableDatasets.generic.length} custom` : ''}</div>
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-full p-1 flex-wrap">
+            <button onClick={()=> setDatasetFilter('all')} className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-medium ${datasetFilter==='all' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'}`}>All {availableDatasets.canonical.length + availableDatasets.generic.length || 4}</button>
+            {availableDatasets.canonical.map((d:any)=>(
+              <button key={d.dataset_name} onClick={()=> setDatasetFilter(d.dataset_name)} className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-medium capitalize ${datasetFilter===d.dataset_name ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'}`}>{d.display || d.dataset_name}</button>
+            ))}
+            {availableDatasets.generic.map((d:any)=>(
+              <button key={d.dataset_name} onClick={()=> setDatasetFilter(d.dataset_name)} className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-medium ${datasetFilter===d.dataset_name ? 'bg-emerald-600 text-white' : 'text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-white'}`}>{d.display || d.dataset_name}</button>
+            ))}
+            {availableDatasets.canonical.length===0 && availableDatasets.generic.length===0 && (['customers','usage','support','feedback'] as const).map(f=>(
+              <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-medium capitalize ${datasetFilter===f ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'}`}>{f}</button>
             ))}
           </div>
         </div>
         <div className="flex items-center gap-2 mt-2 text-[11px] font-mono">
-          <span className="bg-slate-900 text-white px-2 py-0.5 rounded-full">{datasetCounts ? `${customers.length} · ${datasetCounts.usage} · ${datasetCounts.support} · ${datasetCounts.feedback}` : 'loading…'}</span>
-          <span className="text-slate-500">{datasetFilter==='all' ? 'Showing all 4' : `Filtered: ${datasetFilter}`}</span>
+          <span className="bg-slate-900 text-white px-2 py-0.5 rounded-full">{datasetCounts ? `${customers.length} · ${datasetCounts.usage} · ${datasetCounts.support} · ${datasetCounts.feedback}` : 'loading…'}{availableDatasets.generic.length ? ` + ${availableDatasets.generic.reduce((s:any,g:any)=>s+g.rows,0)} custom` : ''}</span>
+          <span className="text-slate-500">{datasetFilter==='all' ? `Showing all ${availableDatasets.canonical.length + availableDatasets.generic.length || 4}` : `Filtered: ${datasetFilter}`}</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           {(datasetFilter==='all' || datasetFilter==='customers') && (
@@ -124,32 +131,47 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
             <div className="text-[11px] text-slate-500 font-mono">13 cols · DB</div>
           </div>
           )}
-          {(datasetFilter==='all' || datasetFilter==='usage') && (
-          <div className={`border rounded-xl p-3 text-center transition ${datasetFilter==='usage' ? 'border-blue-400 bg-blue-50 ring-2 ring-blue-200' : 'border-blue-200 bg-blue-50'}`}>
+          {(datasetFilter==='all' || datasetFilter==='usage' || datasetFilter==='usage_events') && (
+          <div className={`border rounded-xl p-3 text-center transition ${datasetFilter==='usage' || datasetFilter==='usage_events' ? 'border-blue-400 bg-blue-50 ring-2 ring-blue-200' : 'border-blue-200 bg-blue-50'}`}>
             <Activity className="w-5 h-5 mx-auto text-blue-600" />
             <div className="text-xs font-bold mt-1">Usage</div>
             <div className="text-xl font-bold">{datasetCounts ? datasetCounts.usage : '—'}</div>
             <div className="text-[11px] text-slate-500 font-mono">events · live</div>
           </div>
           )}
-          {(datasetFilter==='all' || datasetFilter==='support') && (
-          <div className={`border rounded-xl p-3 text-center transition ${datasetFilter==='support' ? 'border-orange-400 bg-orange-50 ring-2 ring-orange-200' : 'border-orange-200 bg-orange-50'}`}>
+          {(datasetFilter==='all' || datasetFilter==='support' || datasetFilter==='support_tickets') && (
+          <div className={`border rounded-xl p-3 text-center transition ${datasetFilter==='support' || datasetFilter==='support_tickets' ? 'border-orange-400 bg-orange-50 ring-2 ring-orange-200' : 'border-orange-200 bg-orange-50'}`}>
             <LifeBuoy className="w-5 h-5 mx-auto text-orange-600" />
             <div className="text-xs font-bold mt-1">Support</div>
             <div className="text-xl font-bold">{datasetCounts ? datasetCounts.support : '—'}</div>
             <div className="text-[11px] text-slate-500 font-mono">tickets · live</div>
           </div>
           )}
-          {(datasetFilter==='all' || datasetFilter==='feedback') && (
-          <div className={`border rounded-xl p-3 text-center transition ${datasetFilter==='feedback' ? 'border-purple-400 bg-purple-50 ring-2 ring-purple-200' : 'border-purple-200 bg-purple-50'}`}>
+          {(datasetFilter==='all' || datasetFilter==='feedback' || datasetFilter==='customer_feedbacks') && (
+          <div className={`border rounded-xl p-3 text-center transition ${datasetFilter==='feedback' || datasetFilter==='customer_feedbacks' ? 'border-purple-400 bg-purple-50 ring-2 ring-purple-200' : 'border-purple-200 bg-purple-50'}`}>
             <MessageSquare className="w-5 h-5 mx-auto text-purple-600" />
             <div className="text-xs font-bold mt-1">Feedback</div>
             <div className="text-xl font-bold">{datasetCounts ? datasetCounts.feedback : '—'}</div>
             <div className="text-[11px] text-slate-500 font-mono">entries · live</div>
           </div>
           )}
+          {availableDatasets.generic.filter((g:any)=> datasetFilter==='all' || datasetFilter===g.dataset_name).map((g:any)=>(
+            <div key={g.dataset_name} className={`border rounded-xl p-3 text-center transition ${datasetFilter===g.dataset_name ? 'border-slate-900 bg-slate-50 ring-2 ring-slate-300' : 'border-slate-200 bg-white'}`}>
+              <Database className="w-5 h-5 mx-auto text-slate-700" />
+              <div className="text-xs font-bold mt-1 truncate" title={g.dataset_name}>{g.display || g.dataset_name}</div>
+              <div className="text-xl font-bold">{g.rows}</div>
+              <div className="text-[11px] text-slate-500 font-mono">{g.headers?.length||0} cols · custom</div>
+            </div>
+          ))}
         </div>
-        <div className="text-xs text-slate-500 mt-2">All 4 are tenant-isolated — filter by dataset above or see <b>Data Hub → 4 folders</b> for complete CSVs. Updates on Refresh.</div>
+        <div className="text-xs text-slate-500 mt-2">All datasets tenant-isolated — filter by any dataset above or see <b>Data Hub → {availableDatasets.canonical.length + availableDatasets.generic.length || 4} folders</b> for complete CSVs. Updates on Refresh. Upload any CSV → new dataset.</div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-mono text-slate-500">Agent 100% — Acme replay:</span>
+          <button onClick={async()=>{ try{ await replayAcmeStep('healthy'); alert('Acme healthy baseline replayed'); }catch{ alert('Replay failed'); }}} className="px-2.5 py-1 rounded-full text-xs border border-slate-200 bg-white hover:bg-slate-50">Healthy</button>
+          <button onClick={async()=>{ try{ await replayAcmeStep('friction'); alert('Acme friction injected'); }catch{ alert('Replay failed'); }}} className="px-2.5 py-1 rounded-full text-xs border border-amber-200 bg-amber-50 hover:bg-amber-100">Friction</button>
+          <button onClick={async()=>{ try{ await replayAcmeStep('recovery'); alert('Acme recovery replayed'); }catch{ alert('Replay failed'); }}} className="px-2.5 py-1 rounded-full text-xs border border-emerald-200 bg-emerald-50 hover:bg-emerald-100">Recovery</button>
+          <span className="text-[11px] text-slate-400">→ demo SENSE→THINK→ACT loop</span>
+        </div>
       </Card>
 
       <Card padding="p-0">

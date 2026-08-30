@@ -1025,49 +1025,147 @@ async def get_customer_memory(customer_id: str, db: AsyncSession = Depends(get_d
 
 @router.get("/learning")
 async def get_learning_overview(db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
-    tenant_id: str = Depends(require_tenant)):
-    """Learning overview: candidates vs validated."""
+    tenant_id: str = Depends(require_tenant),
+    dataset: str | None = None):
+    """Learning overview: candidates vs validated — dynamic for any dataset (canonical + generic).
+
+    Dataset filter: if ?dataset=foo provided, filters server-side where pattern/context_json/contexts contain foo.
+    Otherwise returns all (any N datasets). Fully tenant-isolated.
+    """
     from sqlalchemy import select
     from retainai.db.models import LearningCandidate
-    cand_res = await db.execute(select(LearningCandidate).where(LearningCandidate.tenant_id == tenant_id).order_by(LearningCandidate.created_at.desc()).limit(20))
-    candidates = list(cand_res.scalars().all())
+    # — Dynamic dataset-aware filtering: allow ?dataset=<name> for any N datasets —
+    # We fetch all then filter in python (JSON field cannot be indexed simply for sqlite)
+    cand_res = await db.execute(select(LearningCandidate).where(LearningCandidate.tenant_id == tenant_id).order_by(LearningCandidate.created_at.desc()).limit(100))
+    candidates_all = list(cand_res.scalars().all())
     mem_repo = MemoryRepository(db, tenant_id=tenant_id)
-    validated = await mem_repo.get_validated_memories()
+    validated_all = await mem_repo.get_validated_memories()
+    # Helper to extract dataset provenance from candidate/memory
+    def _candidate_dataset_name(c):
+        try:
+            return (c.context_json or {}).get("dataset_name") or (c.context_json or {}).get("source_dataset")
+        except Exception:
+            return None
+    def _memory_dataset_name(m):
+        try:
+            # contexts is list[dict], first entry may hold dataset_name
+            if getattr(m, "contexts", None) and isinstance(m.contexts, list) and len(m.contexts) > 0:
+                ds = m.contexts[0].get("dataset_name") or m.contexts[0].get("source_dataset")
+                if ds:
+                    return ds
+            # fallback: check signals or pattern for generic hint
+            return None
+        except Exception:
+            return None
+    def _matches_dataset(obj_dataset, obj_text, q):
+        if not q:
+            return True
+        ql = q.strip().lower()
+        # Strict dataset provenance when present — prevents cross-dataset leakage for any N datasets
+        if obj_dataset:
+            # normalize: dataset param may be alias like "usage" for "usage_events"
+            alias_to_canonical = {"usage":"usage_events","support":"support_tickets","feedback":"customer_feedbacks","customers":"customers","usage_events":"usage_events","support_tickets":"support_tickets","customer_feedbacks":"customer_feedbacks"}
+            q_canon = alias_to_canonical.get(ql, ql)
+            ds_canon = alias_to_canonical.get(obj_dataset.lower(), obj_dataset.lower())
+            if q_canon == ds_canon:
+                return True
+            if ql == obj_dataset.lower() or obj_dataset.lower() == ql:
+                return True
+            # For generic datasets, require exact provenance match; heuristic not applied
+            return False
+        # Fallback heuristic only when provenance missing (legacy data without dataset_name)
+        if ql in (obj_text or "").lower():
+            return True
+        alias_map = {"usage_events": ["usage","dau","active","decline"], "support_tickets": ["ticket","support","bug"], "customer_feedbacks": ["feedback","sentiment","csat","nps"], "customers": ["customer","segment"]}
+        for canon, kws in alias_map.items():
+            if ql == canon and any(kw in (obj_text or "").lower() for kw in kws):
+                return True
+            if ql in kws and canon in (obj_text or "").lower():
+                return True
+        return False
+
+    # Apply dataset filter if provided
+    if dataset:
+        filtered_candidates = []
+        for c in candidates_all:
+            ds_name = _candidate_dataset_name(c)
+            txt = f"{c.pattern or ''} {c.intervention_type or ''} {c.observed_outcome or ''} {ds_name or ''}"
+            if _matches_dataset(ds_name, txt, dataset):
+                filtered_candidates.append(c)
+        candidates = filtered_candidates[:20]
+        filtered_validated = []
+        for m in validated_all:
+            ds_name = _memory_dataset_name(m)
+            txt = f"{m.pattern or ''} {m.context_pattern or ''} {m.risk_pattern or ''} {m.recommended_strategy or ''} {' '.join(m.signals or [])} {ds_name or ''}"
+            if _matches_dataset(ds_name, txt, dataset):
+                filtered_validated.append(m)
+        validated = filtered_validated
+    else:
+        candidates = candidates_all[:20]
+        validated = validated_all
+
+    # — Full dynamic projection: expose every field front needs for any dataset —
     return {
         "candidates": [
             {
                 "candidate_id": c.id,
+                "id": c.id,
                 "pattern": c.pattern,
                 "context": c.context_json,
+                "context_json": c.context_json,
                 "intervention": c.intervention_type,
+                "intervention_type": c.intervention_type,
                 "observed_outcome": c.observed_outcome,
                 "evidence_ids": c.evidence_ids,
                 "sample_size": c.sample_size,
                 "confidence": c.confidence,
                 "source_interventions": c.source_intervention_ids,
+                "source_intervention_ids": c.source_intervention_ids,
                 "status": c.status,
                 "validation_status": c.validation_status.value if hasattr(c.validation_status, "value") else str(c.validation_status),
+                "dataset_name": (c.context_json or {}).get("dataset_name"),
+                "customer_segment": (c.context_json or {}).get("segment"),
+                "created_at": c.created_at.isoformat() if hasattr(c, "created_at") and c.created_at else None,
+                "tenant_id": c.tenant_id,
             }
             for c in candidates
         ],
         "validated_memories": [
             {
                 "memory_id": m.id,
+                "id": m.id,
                 "pattern": m.pattern or m.context_pattern,
-                "recommended_intervention": m.recommended_strategy,
+                "context_pattern": m.context_pattern,
+                "risk_pattern": m.risk_pattern,
+                "customer_segment": getattr(m, "customer_segment", None),
+                "industry_segment": getattr(m, "customer_segment", None),
+                "signals": getattr(m, "signals", []) or [],
+                "recommended_strategy": m.recommended_strategy,
+                "recommended_intervention": m.recommended_strategy or getattr(m, "recommended_intervention", None),
+                "actual_action": getattr(m, "actual_action", None),
+                "observed_outcome": getattr(m, "observed_outcome", None),
+                "key_insights": getattr(m, "observed_outcome", None),
                 "success_count": m.success_count,
                 "failure_count": m.failure_count,
-                "sample_size": getattr(m, "sample_size", m.success_count),
+                "sample_size": getattr(m, "sample_size", m.success_count) or m.success_count or 1,
                 "success_rate": getattr(m, "success_rate", 0.0),
                 "confidence": m.confidence,
-                "last_observed": m.last_observed.isoformat() if hasattr(m, "last_observed") and m.last_observed else m.updated_at.isoformat(),
-                "source_intervention_ids": getattr(m, "source_intervention_ids", []),
+                "last_observed": m.last_observed.isoformat() if hasattr(m, "last_observed") and m.last_observed else (m.updated_at.isoformat() if hasattr(m, "updated_at") and m.updated_at else None),
+                "created_at": m.created_at.isoformat() if hasattr(m, "created_at") and m.created_at else None,
+                "updated_at": m.updated_at.isoformat() if hasattr(m, "updated_at") and m.updated_at else None,
+                "source_intervention_ids": getattr(m, "source_intervention_ids", []) or [],
                 "evidence_ids": m.evidence_ids,
                 "status": getattr(m, "status", "VALIDATED"),
                 "validation_status": m.validation_status.value if hasattr(m.validation_status, "value") else str(m.validation_status),
+                "contexts": getattr(m, "contexts", []) or [],
+                "context": (getattr(m, "contexts", []) or [None])[0],
+                "dataset_name": (getattr(m, "contexts", [])[0].get("dataset_name") if getattr(m, "contexts", []) and isinstance(getattr(m, "contexts", [])[0], dict) else None),
+                "tenant_id": m.tenant_id,
             }
             for m in validated
         ],
+        # also expose dynamic dataset counts for header
+        "datasets_hint": {"total_validated": len(validated_all), "total_candidates": len(candidates_all)},
     }
 
 
@@ -1287,8 +1385,8 @@ async def modify_recommendation_alias(recommendation_id: str, modified_action: D
 @router.post("/interventions/{intervention_id}/outcome", response_model=OutcomeSchema)
 async def record_outcome(intervention_id: str, req: OutcomeCreateRequest, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
     tenant_id: str = Depends(require_tenant)):
-    """Record intervention outcome and trigger learning validation gate."""
-    engine = LearningEngine(db)
+    """Record intervention outcome and trigger learning validation gate — dynamic for any dataset."""
+    engine = LearningEngine(db, tenant_id=tenant_id)
     # Support both path param and body field; body field is now optional
     effective_id = req.intervention_id or intervention_id
     return await engine.evaluate_intervention_outcome(
@@ -1299,6 +1397,8 @@ async def record_outcome(intervention_id: str, req: OutcomeCreateRequest, db: As
         usage_after=req.usage_after,
         customer_response=req.customer_response,
         notes=req.notes,
+        dataset_name=getattr(req, "dataset_name", None),
+        source_dataset=getattr(req, "source_dataset", None),
     )
 
 

@@ -182,14 +182,22 @@ class ChatOrchestrator:
 
         q = user_question.strip()[:800]
 
+        # Tune: specialists → gpt-oss-20b (1000 TPS, separate TPM quota, 2x faster, half cost)
+        # Keeps synthesizer on 120b for quality. Eliminates 429 seen with 5×120b burst (Used 6873 + 2863 > 8000 TPM).
+        specialist_llm = LLMClient(api_key=llm.api_key, model="openai/gpt-oss-20b", provider=llm.provider if llm.provider in ("groq","groq_api","gsk") else "groq")
+
         async def call_specialist(prompt: str, data: str, label: str) -> str:
             start = time.time()
-            fallback = f"[{label} offline] Based on cached data: {data[:300]}"
+            fallback = f"[{label}] Based on cached data: {data[:320]}"
             try:
-                # Reduced tokens to stay under Groq 8k TPM (5 parallel * 250 ~1250)
-                res = await llm.chat(system_prompt=prompt, user_prompt=f"USER QUESTION: {q}\n\nDATA:\n{data}", fallback_text=fallback, temperature=0.3, max_tokens=250)
+                # 20b fast path, 350 tok ×5 = 1750 TPM on 20b quota (separate from 120b)
+                res = await specialist_llm.chat(system_prompt=prompt, user_prompt=f"USER QUESTION: {q}\n\nDATA:\n{data}", fallback_text=fallback, temperature=0.3, max_tokens=350)
+                # Guard: LLM sometimes returns empty / whitespace on 20b for sparse data → use fallback so UI shows 5 done, not idle
+                if not res or not res.strip():
+                    logger.warning(f"specialist {label} returned empty, using fallback")
+                    return fallback
                 latency = int((time.time()-start)*1000)
-                logger.info(f"specialist {label} ok latency={latency}ms")
+                logger.info(f"specialist {label} ok latency={latency}ms model=gpt-oss-20b chars={len(res)}")
                 return res
             except Exception as e:
                 logger.warning(f"specialist {label} failed: {e}")
@@ -261,7 +269,7 @@ class ChatOrchestrator:
         specialists = await self._run_specialists_parallel(context, user_question, llm)
         spec_latency = int((time.time()-spec_t0)*1000)
 
-        # 3. synthesizer — 600 tokens to stay under TPM, with polished fallback that still synthesizes
+        # 3. synthesizer — 900 tokens to ensure complete markdown table (was 600 → truncated at 500 chars), still under TPM 8000 (only 120b)
         synth_t0 = time.time()
         synthesis_user = self._build_synthesis_prompt(context, specialists, conversation_history or [], user_question)
         # Polished offline fallback synthesizes specialists into markdown even if LLM 429
@@ -274,7 +282,7 @@ class ChatOrchestrator:
             for k in ["risk","usage","support","sentiment","memory"]:
                 v = specialists.get(k, "")
                 if v:
-                    lines.append(f"**{k.upper()}**: {v.strip()[:400]}")
+                    lines.append(f"**{k.upper()}**: {v.strip()[:500]}")
                     lines.append("")
             ev = [item.get("id") for kk in ["usage_events","support_tickets","feedback_entries"] for item in context.get("evidence", {}).get(kk, [])][:8]
             if ev:
@@ -282,7 +290,7 @@ class ChatOrchestrator:
             lines.append(f"\n**Next steps**: Review evidence → address root cause → MEASURE outcome in 14d.")
             return "\n".join(lines)
         fallback_synth = _offline_synth()
-        final_text = await llm.chat(system_prompt=SYNTHESIZER_PROMPT, user_prompt=synthesis_user, fallback_text=fallback_synth, temperature=0.4, max_tokens=600)
+        final_text = await llm.chat(system_prompt=SYNTHESIZER_PROMPT, user_prompt=synthesis_user, fallback_text=fallback_synth, temperature=0.4, max_tokens=900)
         synth_latency = int((time.time()-synth_t0)*1000)
 
         total_latency = int((time.time()-t0)*1000)

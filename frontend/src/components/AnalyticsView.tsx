@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getPortfolio, getObservability } from '../services/api';
+import { getPortfolio, getObservability, getDatasets } from '../services/api';
 import { Card, SkeletonCard, ErrorState } from './ui';
 import { BarChart3, TrendingUp, PieChart, Activity, DollarSign, Shield } from 'lucide-react';
 
@@ -61,7 +61,9 @@ export const AnalyticsView: React.FC = () => {
   const [obs, setObs] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [datasetFilter, setDatasetFilter] = useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
+  const [datasetFilter, setDatasetFilter] = useState<string>('all');
+  const [availableDatasets, setAvailableDatasets] = useState<{canonical:any[];generic:any[]}>({canonical:[],generic:[]});
+  useEffect(()=>{ getDatasets().then((ds: any)=> setAvailableDatasets({canonical: ds.canonical||[], generic: ds.generic||[]})).catch(()=>{}); },[]);
 
   const load = async () => {
     try {
@@ -130,10 +132,17 @@ export const AnalyticsView: React.FC = () => {
         <div className="flex items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="w-5 h-5" /> Analytics — visuals</h2>
-            <p className="text-sm text-slate-600 mt-1">Live portfolio visuals, not mock. All from <code className="bg-slate-100 px-1 rounded">GET /portfolio</code> + <code className="bg-slate-100 px-1 rounded">/metrics/observability</code> per tenant. Filter by dataset:</p>
+            <p className="text-sm text-slate-600 mt-1">Live portfolio visuals, not mock. All from <code className="bg-slate-100 px-1 rounded">GET /portfolio</code> + <code className="bg-slate-100 px-1 rounded">/metrics/observability</code> per tenant. Filter by any dataset:</p>
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {(['all','customers','usage','support','feedback'] as const).map(f=>(
-                <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f==='all' ? 'All 4' : f}</button>
+              <button onClick={()=> setDatasetFilter('all')} className={`px-3 py-1 rounded-full text-xs font-mono border ${datasetFilter==='all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>All {availableDatasets.canonical.length + availableDatasets.generic.length || 4}</button>
+              {availableDatasets.canonical.map((d:any)=>(
+                <button key={d.dataset_name} onClick={()=> setDatasetFilter(d.dataset_name)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===d.dataset_name ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{d.display || d.dataset_name}</button>
+              ))}
+              {availableDatasets.generic.map((d:any)=>(
+                <button key={d.dataset_name} onClick={()=> setDatasetFilter(d.dataset_name)} className={`px-3 py-1 rounded-full text-xs font-mono border ${datasetFilter===d.dataset_name ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-white'}`}>{d.display || d.dataset_name}</button>
+              ))}
+              {availableDatasets.canonical.length===0 && availableDatasets.generic.length===0 && (['customers','usage','support','feedback'] as const).map(f=>(
+                <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f}</button>
               ))}
               <span className="text-xs text-slate-500 self-center ml-1">{datasetFilter==='all' ? 'all datasets' : datasetFilter} · {customers.length} accounts</span>
             </div>

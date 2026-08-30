@@ -5,7 +5,8 @@ import { Card, SectionHeader, Skeleton, ErrorState, EmptyState, EvidenceDrawer }
 import { Building, Mail, Activity, Bot, FileText, ListOrdered, CheckCircle2, Clock, TrendingDown, ShieldAlert, Zap, ArrowRight, Sparkles, BarChart3, AlertCircle, Check, ChevronRight, Upload, Database, MessageCircle } from 'lucide-react';
 import { TelemetryUpload } from './TelemetryUpload';
 
-export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
+type TabNav = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit'|'onboarding'|'settings'|'analytics'|'datahub'|'chat';
+export const Customer360: React.FC<{customerId:string; onNavigate?: (tab: TabNav)=>void}> = ({customerId, onNavigate})=>{
   const [customer,setCustomer]=useState<any>(null);
   const [timeline,setTimeline]=useState<any[]>([]);
   const [risk,setRisk]=useState<any>(null);
@@ -33,6 +34,9 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
   const [outcomeError,setOutcomeError]=useState<string|null>(null);
   const [outcomeSuccess,setOutcomeSuccess]=useState<any>(null);
   const investigationRef = useRef<HTMLDivElement>(null);
+  const senseRef = useRef<HTMLDivElement>(null);
+  const learnRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
 
   const load = async()=>{
     try{
@@ -147,26 +151,42 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
   const hasApproved = !!approvedId || interventions.some((iv:any)=>['APPROVED','COMPLETED','EXECUTED'].includes(iv.status));
   const hasMeasured = !!outcomeSuccess;
   const stepIndex = hasMeasured ? 4 : hasApproved ? 3 : hasResult ? 2 : hasSignal ? 1 : 0;
-  const stepLabels = ['SENSE','THINK','ACT','MEASURE','LEARN'];
+  const stepLabels = ['SENSE','THINK','ACT','MEASURE','LEARN'] as const;
   const stepDescs = ['Telemetry ingested','Investigating evidence','Awaiting approval','Measuring outcome','Learning validated'];
+  // Clickable stepper -> scroll to section or navigate to tab
+  const scrollToStep = (i:number) => {
+    const elMap: Record<number, React.RefObject<HTMLDivElement> | null> = { 0: senseRef, 1: investigationRef, 2: investigationRef, 3: measureRef, 4: learnRef };
+    let target = elMap[i]?.current || null;
+    if (i===3 && !target) target = investigationRef.current;
+    if (target) {
+      target.scrollIntoView({ behavior:'smooth', block:'start' });
+      target.classList.add('ring-2','ring-slate-900','ring-offset-2');
+      setTimeout(()=> target.classList.remove('ring-2','ring-slate-900','ring-offset-2'), 1200);
+    } else if (i===4) {
+      onNavigate?.('learning');
+    } else if (i===0) {
+      senseRef.current?.scrollIntoView({ behavior:'smooth', block:'start' });
+    }
+  };
 
   return (
     <div className="space-y-5">
-      {/* Breadcrumb */}
+      {/* Breadcrumb — clickable Customers navigates to Customers list */}
       <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
-        <span>Customers</span> <ChevronRight className="w-3 h-3"/> <span className="text-slate-700 font-medium">{customer.name}</span> <span className="text-slate-400">· 360</span>
+        <button onClick={()=> onNavigate?.('customers')} className="hover:text-slate-900 hover:underline underline-offset-2 cursor-pointer" title="Go to Customers list">Customers</button> <ChevronRight className="w-3 h-3"/> <span className="text-slate-700 font-medium">{customer.name}</span> <span className="text-slate-400">· 360</span>
+        {onNavigate && <button onClick={()=> onNavigate?.('customers')} className="ml-2 text-[11px] border border-slate-200 bg-white px-2 py-0.5 rounded-full hover:bg-slate-50 hidden sm:inline-flex items-center gap-1">← Back to list</button>}
       </div>
 
-      {/* Stepper — responsive, no text mixing */}
+      {/* Stepper — clickable: each step navigates to its section (SENSE→ inject, THINK/ACT→ investigation, MEASURE→ outcome, LEARN→ memory) */}
       <div className="bg-white border border-slate-200 rounded-xl p-3 overflow-hidden">
         <div className="flex items-center justify-between gap-0.5 sm:gap-1">
           {stepLabels.map((s,i)=>(
             <React.Fragment key={s}>
-              <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
-                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border shrink-0 ${i<stepIndex ? 'bg-emerald-600 text-white border-emerald-600' : i===stepIndex ? 'bg-slate-900 text-white border-slate-900 animate-pulse' : 'bg-white border-slate-200 text-slate-500'}`}>{i<stepIndex ? <Check className="w-3.5 h-3.5 shrink-0"/> : i+1}</span>
-                <span className={`text-[10px] sm:text-[11px] font-mono font-medium whitespace-nowrap ${i===stepIndex ? 'text-slate-900' : i<stepIndex ? 'text-emerald-700' : 'text-slate-500'}`}>{s}</span>
-                <span className="text-[10px] text-slate-400 hidden lg:block leading-none text-center truncate max-w-[90px]" title={stepDescs[i]}>{stepDescs[i]}</span>
-              </div>
+              <button onClick={()=> scrollToStep(i)} className="flex flex-col items-center gap-1 flex-1 min-w-0 group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 rounded-lg py-1" title={`Go to ${s}: ${stepDescs[i]}${i===4 ? ' (also opens Learning tab)' : ''}`}>
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border shrink-0 transition group-hover:scale-105 group-hover:shadow-sm ${i<stepIndex ? 'bg-emerald-600 text-white border-emerald-600' : i===stepIndex ? 'bg-slate-900 text-white border-slate-900 animate-pulse' : 'bg-white border-slate-200 text-slate-500 group-hover:border-slate-300 group-hover:text-slate-700'}`}>{i<stepIndex ? <Check className="w-3.5 h-3.5 shrink-0"/> : i+1}</span>
+                <span className={`text-[10px] sm:text-[11px] font-mono font-medium whitespace-nowrap underline-offset-2 group-hover:underline ${i===stepIndex ? 'text-slate-900' : i<stepIndex ? 'text-emerald-700' : 'text-slate-500 group-hover:text-slate-700'}`}>{s}</span>
+                <span className="text-[10px] text-slate-400 hidden lg:block leading-none text-center truncate max-w-[90px] group-hover:text-slate-500" title={stepDescs[i]}>{stepDescs[i]}</span>
+              </button>
               {i<4 && <div className={`flex-1 h-0.5 mx-0.5 sm:mx-1 min-w-[8px] ${i<stepIndex ? 'bg-emerald-600' : 'bg-slate-200'}`} />}
             </React.Fragment>
           ))}
@@ -224,8 +244,9 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
       )}
       {success && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-3 py-2.5 rounded-lg flex items-start gap-2"><CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0"/><span>{success}</span></div>}
 
+      <div ref={senseRef} className="scroll-mt-20">
       <Card>
-        <SectionHeader title="Inject Live Data (SENSE)" subtitle="Add real telemetry — DB persists, health/risk reassesses instantly, then Run investigation to see agent tools + report" icon={Zap} />
+        <SectionHeader title="Inject Live Data (SENSE)" subtitle="Add real telemetry — DB persists, health/risk reassesses instantly, then Run investigation to see agent tools + report • Click SENSE in stepper to jump here" icon={Zap} />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <button onClick={()=>handleInject('USAGE_EVENT')} disabled={!!injecting} className="inline-flex items-center justify-center gap-1.5 border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-amber-100 disabled:opacity-50 whitespace-nowrap leading-none">
             {injecting==='USAGE_EVENT' ? <><div className="w-3.5 h-3.5 border-2 border-amber-700 border-t-transparent rounded-full animate-spin shrink-0"/><span>Injecting…</span></> : <><TrendingDown className="w-3.5 h-3.5 shrink-0"/>Inject Usage Drop (DAU 8)</>}
@@ -239,6 +260,7 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
         </div>
         <div className="text-xs text-slate-500 mt-2 leading-relaxed">Each click <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">POST /events</code> → <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">SystemEventLog</code> → <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">reassess_customer_risk</code> → timeline & signals update. Then <b>Run investigation</b> to see agent working (tools → report).</div>
       </Card>
+      </div>
 
       <Card>
         <div className="flex items-center justify-between gap-2 mb-3">
@@ -317,9 +339,9 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
         </div>
       </Card>
 
-      <div ref={investigationRef} />
+      <div ref={investigationRef} className="scroll-mt-20" />
       <Card>
-        <SectionHeader title="Investigation" subtitle={result ? `Run ${result.run_id} · ${result.investigation?.uncertainty_status||'READY'}` : 'Run investigation to generate evidence-grounded diagnosis'} icon={Bot} action={result && <button onClick={()=>setDrawerOpen(true)} className="text-xs border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"><FileText className="w-3.5 h-3.5"/>Evidence ({result.investigation.evidence_ids?.length||0})</button>} />
+        <SectionHeader title="Investigation" subtitle={result ? `Run ${result.run_id} · ${result.investigation?.uncertainty_status||'READY'} • Click THINK/ACT in stepper to jump here` : 'Run investigation to generate evidence-grounded diagnosis • Click THINK in stepper to jump here'} icon={Bot} action={result && <button onClick={()=>setDrawerOpen(true)} className="text-xs border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"><FileText className="w-3.5 h-3.5"/>Evidence ({result.investigation.evidence_ids?.length||0})</button>} />
         {!result ? (
           <div className="space-y-3">
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -406,7 +428,7 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
                 )}
                 {/* MEASURE */}
                 {approvedId && !outcomeSuccess && (
-                  <div className="mt-4 border-t border-slate-200 pt-4">
+                  <div ref={measureRef} className="mt-4 border-t border-slate-200 pt-4 scroll-mt-20">
                     <div className="flex items-center justify-between">
                       <div className="text-xs font-semibold flex items-center gap-1.5"><BarChart3 className="w-4 h-4"/> MEASURE: Record outcome</div>
                       <button onClick={()=>setShowOutcomeForm(v=>!v)} className={`text-xs px-3 py-1.5 rounded-lg border font-medium ${showOutcomeForm?'bg-slate-900 text-white border-slate-900':'bg-white hover:bg-slate-50'}`}>{showOutcomeForm ? 'Cancel' : 'Record Outcome'}</button>
@@ -535,8 +557,9 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
               </div>
             )}
           </Card>
+          <div ref={learnRef} className="scroll-mt-20">
           <Card>
-            <SectionHeader title="Relevant experience" subtitle="Validated patterns for this segment" icon={Zap} />
+            <SectionHeader title="Relevant experience" subtitle="Validated patterns for this segment • Click LEARN in stepper to jump here (or open Learning tab)" icon={Zap} action={<button onClick={()=> onNavigate?.('learning')} className="text-[11px] border border-slate-200 bg-white px-2 py-1 rounded-full hover:bg-slate-50">Open Learning →</button>} />
             {memory.length===0 ? <div className="text-xs text-slate-500">No validated memories for {customer.segment} yet. <span className="text-slate-400">Complete MEASURE to build memory.</span></div> : (
               <div className="space-y-2">
                 {memory.slice(0,3).map((m:any)=>(
@@ -549,12 +572,13 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
               </div>
             )}
           </Card>
+          </div>
           <Card>
-            <div className="text-xs font-semibold">Lifecycle</div>
+            <div className="text-xs font-semibold flex items-center justify-between"><span>Lifecycle</span><span className="text-[11px] font-normal text-slate-400 font-mono">click step → jump</span></div>
             <div className="mt-2 flex items-center gap-1 text-[11px] font-mono flex-wrap">
               {stepLabels.map((s,i)=>(
                 <React.Fragment key={s}>
-                  <span className={`px-2 py-1 rounded-full border transition whitespace-nowrap leading-none shrink-0 ${i===stepIndex ? 'bg-slate-900 text-white border-slate-900 font-bold' : i<stepIndex ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white border-slate-200 text-slate-500'}`}>{s}</span>
+                  <button onClick={()=> scrollToStep(i)} title={`Jump to ${s}`} className={`px-2 py-1 rounded-full border transition whitespace-nowrap leading-none shrink-0 cursor-pointer hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 ${i===stepIndex ? 'bg-slate-900 text-white border-slate-900 font-bold' : i<stepIndex ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>{s}</button>
                   {i<4 && <ArrowRight className={`w-3 h-3 shrink-0 ${i<stepIndex ? 'text-emerald-500' : 'text-slate-400'}`}/>}
                 </React.Fragment>
               ))}

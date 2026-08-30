@@ -184,7 +184,7 @@ export const LoginPage: React.FC<{ onSuccess?: () => void; initialMode?: 'login'
 
           <div className="mt-4 text-xs text-slate-500 text-center">Demo bypass still active when <code className="bg-slate-100 px-1 rounded">DEMO_MODE=true</code> — login optional for hackathon, required when <code className="bg-slate-100 px-1 rounded">AUTH_ENABLED=true</code> in prod.</div>
           <div className="mt-2 text-xs text-center flex items-center justify-center gap-2">
-            <button onClick={() => { try { localStorage.setItem('retainai_bypass','1'); } catch {}; onSuccess?.(); window.location.reload(); }} className="text-slate-600 hover:text-slate-900 underline inline-flex items-center gap-1">Continue as demo (bypass) <ArrowRight className="w-3 h-3" /></button>
+            <button onClick={() => { try { localStorage.setItem('retainai_bypass','1'); localStorage.setItem('retainai_activeTab','onboarding'); } catch {}; onSuccess?.(); }} className="text-slate-600 hover:text-slate-900 underline inline-flex items-center gap-1">Continue as demo (bypass) <ArrowRight className="w-3 h-3" /></button>
           </div>
 
           <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between text-[11px] font-mono text-slate-400">

@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import { getAllInterventions, getAllOutcomes, approveIntervention, rejectIntervention, recordOutcome, getPortfolio } from '../services/api';
+import { getAllInterventions, getAllOutcomes, approveIntervention, rejectIntervention, recordOutcome, getPortfolio, getDatasets } from '../services/api';
 import { Card, ErrorState, EmptyState, SkeletonCard } from './ui';
 import { ClipboardList, CheckCircle2, XCircle, Clock, ArrowRight, BarChart3, AlertCircle } from 'lucide-react';
 
@@ -9,7 +9,9 @@ export const InterventionsView: React.FC = ()=>{
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState<string|null>(null);
   const [filter,setFilter]=useState<string>('ALL');
-  const [datasetFilter, setDatasetFilter] = useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
+  const [datasetFilter, setDatasetFilter] = useState<string>('all');
+  const [availableDatasets, setAvailableDatasets] = useState<{canonical:any[];generic:any[]}>({canonical:[],generic:[]});
+  useEffect(()=>{ getDatasets().then(ds=> setAvailableDatasets({canonical: ds.canonical||[], generic: ds.generic||[]})).catch(()=>{}); },[]);
   const [outcomeFor,setOutcomeFor]=useState<string|null>(null);
   const [healthAfter,setHealthAfter]=useState('');
   const [usageAfter,setUsageAfter]=useState('');
@@ -45,11 +47,12 @@ export const InterventionsView: React.FC = ()=>{
   };
   const datasetFiltered = datasetFilter==='all' ? inters : inters.filter((iv:any)=>{
     const txt = `${iv.action_type||''} ${iv.title||''} ${iv.description||''} ${JSON.stringify(iv.plan||'')}`.toLowerCase();
+    if(availableDatasets.generic.some((g:any)=> g.dataset_name===datasetFilter)) return txt.includes(datasetFilter.toLowerCase());
     if(datasetFilter==='customers') return true;
-    if(datasetFilter==='usage') return txt.includes('usage') || txt.includes('adoption') || txt.includes('dau') || txt.includes('active');
-    if(datasetFilter==='support') return txt.includes('support') || txt.includes('ticket') || txt.includes('bug') || txt.includes('escalat');
-    if(datasetFilter==='feedback') return txt.includes('feedback') || txt.includes('sentiment') || txt.includes('csat') || txt.includes('nps');
-    return true;
+    if(datasetFilter==='usage' || datasetFilter==='usage_events') return txt.includes('usage') || txt.includes('adoption') || txt.includes('dau') || txt.includes('active');
+    if(datasetFilter==='support' || datasetFilter==='support_tickets') return txt.includes('support') || txt.includes('ticket') || txt.includes('bug') || txt.includes('escalat');
+    if(datasetFilter==='feedback' || datasetFilter==='customer_feedbacks') return txt.includes('feedback') || txt.includes('sentiment') || txt.includes('csat') || txt.includes('nps');
+    return txt.includes(datasetFilter.toLowerCase());
   });
   const filtered = filter==='ALL' ? datasetFiltered : datasetFiltered.filter((x:any)=> (x.status||'').toUpperCase()===filter);
   const outcomeByIntervention = new Map(outcomes.map((o:any)=>[o.intervention_id, o]));
@@ -86,8 +89,15 @@ export const InterventionsView: React.FC = ()=>{
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <span className="text-xs font-mono text-slate-500">Dataset:</span>
-          {(['all','customers','usage','support','feedback'] as const).map(f=>(
-            <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-2.5 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f==='all' ? 'All 4' : f}</button>
+          <button onClick={()=> setDatasetFilter('all')} className={`px-2.5 py-1 rounded-full text-xs font-mono border ${datasetFilter==='all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>All {availableDatasets.canonical.length + availableDatasets.generic.length || 4}</button>
+          {availableDatasets.canonical.map((d:any)=>(
+            <button key={d.dataset_name} onClick={()=> setDatasetFilter(d.dataset_name)} className={`px-2.5 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===d.dataset_name ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{d.display || d.dataset_name}</button>
+          ))}
+          {availableDatasets.generic.map((d:any)=>(
+            <button key={d.dataset_name} onClick={()=> setDatasetFilter(d.dataset_name)} className={`px-2.5 py-1 rounded-full text-xs font-mono border ${datasetFilter===d.dataset_name ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-white'}`}>{d.display || d.dataset_name}</button>
+          ))}
+          {availableDatasets.canonical.length===0 && availableDatasets.generic.length===0 && (['customers','usage','support','feedback'] as const).map(f=>(
+            <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-2.5 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f}</button>
           ))}
           <span className="text-xs text-slate-500 ml-1">{datasetFilter==='all' ? 'all datasets' : datasetFilter} · {datasetFiltered.length} interventions</span>
         </div>
