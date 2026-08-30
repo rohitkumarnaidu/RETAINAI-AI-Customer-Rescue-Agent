@@ -28,8 +28,8 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./retainai.db"
 
-    LLM_PROVIDER: str = "gemini"  # gemini | groq | openai | anthropic | mock
-    LLM_MODEL: str = "gemini-2.5-flash"  # gemini-2.5-flash | llama-3.3-70b-versatile (groq) | gpt-4o
+    LLM_PROVIDER: str = "groq"  # gemini | groq | openai | anthropic | mock — groq LPU is fastest for demo
+    LLM_MODEL: str = "llama-3.3-70b-versatile"  # groq: llama-3.3-70b-versatile | deepseek-r1-distill-llama-70b (reasoning) | meta-llama/llama-4-maverick-17b-128e-instruct | qwen/qwen3-32b — gemini: gemini-2.5-pro > gemini-2.5-flash
     LLM_API_KEY: str = "mock_key_for_dev"
     GROQ_API_KEY: str = ""  # alias for LLM_API_KEY when provider=groq (gsk_...)
 

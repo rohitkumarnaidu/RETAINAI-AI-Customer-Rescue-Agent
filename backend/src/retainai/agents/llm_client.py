@@ -80,10 +80,14 @@ class LLMClient:
                         logger.warning(f"LLM API returned HTTP {resp.status_code}. Using fallback provider={self.provider} model={self.model}.")
 
             elif self.provider in ("groq", "groq_api", "gsk"):
-                # Groq OpenAI-compatible — fast inference for hackathon demo
-                # Model examples: llama-3.3-70b-versatile, llama-3.1-8b-instant, meta-llama/llama-4-scout-17b-16e-instruct
+                # Groq OpenAI-compatible — better models ranked for RETAINAI investigation/reasoning:
+                # 1) deepseek-r1-distill-llama-70b — best reasoning (chain-of-thought distilled, excels at root-cause)
+                # 2) meta-llama/llama-4-maverick-17b-128e-instruct — newest 128k context
+                # 3) llama-3.3-70b-versatile — best general (default, json_object stable)
+                # 4) qwen/qwen3-32b — strong multilingual
+                # For hackathon demo, default to llama-3.3-70b-versatile; set LLM_MODEL=deepseek-r1-distill-llama-70b for deeper reasoning
                 url = "https://api.groq.com/openai/v1/chat/completions"
-                # Auto-map gemini model name to groq default if user forgot to change model
+                # Auto-map gemini/gpt model name to groq default if user forgot to change model
                 effective_model = self.model
                 if "gemini" in effective_model.lower() or "gpt" in effective_model.lower():
                     effective_model = "llama-3.3-70b-versatile"
