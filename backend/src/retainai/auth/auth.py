@@ -17,7 +17,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 from fastapi import Depends, HTTPException, Header, APIRouter, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
