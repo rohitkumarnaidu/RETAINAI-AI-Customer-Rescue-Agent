@@ -31,6 +31,14 @@ except Exception as _chat_e:
     import logging as _lg3
     _lg3.getLogger("retainai.api").warning(f"Chat router not loaded: {_chat_e}")
     chat_router = None  # type: ignore
+try:
+    from retainai.api.datasets import router as datasets_router
+except Exception as _ds_e:
+    import logging as _lg4
+    _lg4.getLogger("retainai.api").warning(f"Datasets router not loaded: {_ds_e}")
+    datasets_router = None  # type: ignore
+    _lg3.getLogger("retainai.api").warning(f"Chat router not loaded: {_chat_e}")
+    chat_router = None  # type: ignore
 
 logger = logging.getLogger("retainai.api")
 
@@ -109,7 +117,8 @@ async def ensure_tenancy_columns():
     tenant_tables = [
         "customers","usage_events","support_tickets","customer_feedbacks","account_events",
         "risk_assessments","investigation_reports","interventions","intervention_outcomes",
-        "experience_memories","learning_candidates","agent_runs","agent_steps","system_event_logs","evidences","feature_adoptions"
+        "experience_memories","learning_candidates","agent_runs","agent_steps","system_event_logs","evidences","feature_adoptions",
+        "generic_datasets","generic_records"
     ]
     demo_tenant_id = getattr(settings, "DEMO_TENANT_ID", "demo-tenant-001")
     import os
@@ -294,6 +303,8 @@ if auth_router is not None:
     app.include_router(auth_router)
 if 'chat_router' in globals() and chat_router is not None:
     app.include_router(chat_router)
+if 'datasets_router' in globals() and datasets_router is not None:
+    app.include_router(datasets_router)
 
 
 @app.get("/health")

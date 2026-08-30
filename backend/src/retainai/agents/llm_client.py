@@ -200,18 +200,32 @@ class LLMClient:
                     effective_model = "openai/gpt-oss-120b"
                 url = "https://api.groq.com/openai/v1/chat/completions"
                 headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": effective_model,
-                    "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                }
-                async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
-                    resp = await client.post(url, json=payload, headers=headers)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        return data["choices"][0]["message"]["content"]
-                    logger.warning(f"Groq chat HTTP {resp.status_code} body={resp.text[:300]}")
+                # retry loop for TPM 429 — try 2 times, second time falls back to gpt-oss-20b (lower TPM)
+                for attempt in range(2):
+                    cur_model = effective_model if attempt == 0 else "openai/gpt-oss-20b"
+                    cur_tokens = max_tokens if attempt == 0 else min(max_tokens, 600)
+                    payload = {
+                        "model": cur_model,
+                        "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                        "temperature": temperature,
+                        "max_tokens": cur_tokens,
+                    }
+                    async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
+                        resp = await client.post(url, json=payload, headers=headers)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            return data["choices"][0]["message"]["content"]
+                        if resp.status_code == 429 and attempt == 0:
+                            # parse retry-after from body if present: "Please try again in 13.02s"
+                            import re as _re, asyncio as _aio
+                            m = _re.search(r"try again in ([0-9.]+)s", resp.text)
+                            wait = float(m.group(1)) if m else 2.0
+                            wait = min(wait, 6.0)  # cap to 6s for snappy demo
+                            logger.warning(f"Groq chat 429 TPM, retry in {wait}s with fallback model {cur_model} attempt={attempt+1}")
+                            await _aio.sleep(wait)
+                            continue
+                        logger.warning(f"Groq chat HTTP {resp.status_code} body={resp.text[:300]}")
+                        break
             elif self.provider in ("openai", "gpt", "gpt-4", "gpt-4o", "o1", "o3"):
                 effective_model = self.model
                 if "gemini" in effective_model.lower() or "llama" in effective_model.lower():

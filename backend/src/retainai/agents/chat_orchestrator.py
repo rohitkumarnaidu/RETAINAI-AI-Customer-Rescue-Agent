@@ -186,7 +186,8 @@ class ChatOrchestrator:
             start = time.time()
             fallback = f"[{label} offline] Based on cached data: {data[:300]}"
             try:
-                res = await llm.chat(system_prompt=prompt, user_prompt=f"USER QUESTION: {q}\n\nDATA:\n{data}", fallback_text=fallback, temperature=0.3, max_tokens=400)
+                # Reduced tokens to stay under Groq 8k TPM (5 parallel * 250 ~1250)
+                res = await llm.chat(system_prompt=prompt, user_prompt=f"USER QUESTION: {q}\n\nDATA:\n{data}", fallback_text=fallback, temperature=0.3, max_tokens=250)
                 latency = int((time.time()-start)*1000)
                 logger.info(f"specialist {label} ok latency={latency}ms")
                 return res
@@ -260,11 +261,28 @@ class ChatOrchestrator:
         specialists = await self._run_specialists_parallel(context, user_question, llm)
         spec_latency = int((time.time()-spec_t0)*1000)
 
-        # 3. synthesizer
+        # 3. synthesizer — 600 tokens to stay under TPM, with polished fallback that still synthesizes
         synth_t0 = time.time()
         synthesis_user = self._build_synthesis_prompt(context, specialists, conversation_history or [], user_question)
-        fallback_synth = "Offline synthesis:\n\n" + "\n\n".join([f"**{k.upper()}**: {v[:300]}" for k, v in specialists.items()])
-        final_text = await llm.chat(system_prompt=SYNTHESIZER_PROMPT, user_prompt=synthesis_user, fallback_text=fallback_synth, temperature=0.4, max_tokens=800)
+        # Polished offline fallback synthesizes specialists into markdown even if LLM 429
+        def _offline_synth():
+            cid = context.get("profile", {}).get("name") or "Customer"
+            risk = context.get("risk", {}) or {}
+            lvl = risk.get("risk_level", "unknown") if isinstance(risk, dict) else "unknown"
+            health = risk.get("health_score", "") if isinstance(risk, dict) else ""
+            lines = [f"### {cid} — {lvl} (health {health})", ""]
+            for k in ["risk","usage","support","sentiment","memory"]:
+                v = specialists.get(k, "")
+                if v:
+                    lines.append(f"**{k.upper()}**: {v.strip()[:400]}")
+                    lines.append("")
+            ev = [item.get("id") for kk in ["usage_events","support_tickets","feedback_entries"] for item in context.get("evidence", {}).get(kk, [])][:8]
+            if ev:
+                lines.append(f"**Evidence IDs**: {', '.join(ev)}")
+            lines.append(f"\n**Next steps**: Review evidence → address root cause → MEASURE outcome in 14d.")
+            return "\n".join(lines)
+        fallback_synth = _offline_synth()
+        final_text = await llm.chat(system_prompt=SYNTHESIZER_PROMPT, user_prompt=synthesis_user, fallback_text=fallback_synth, temperature=0.4, max_tokens=600)
         synth_latency = int((time.time()-synth_t0)*1000)
 
         total_latency = int((time.time()-t0)*1000)
@@ -331,9 +349,9 @@ class ChatOrchestrator:
             yield json.dumps({"type": "specialist", "agent": name, "content": out}) + "\n"
             await asyncio.sleep(0.05)
 
-        # synthesizer streaming tokens
+        # synthesizer streaming tokens — 650 to fit TPM
         synthesis_user = self._build_synthesis_prompt(context, specialists, conversation_history or [], user_question)
-        async for token in llm.chat_stream(system_prompt=SYNTHESIZER_PROMPT, user_prompt=synthesis_user, temperature=0.4, max_tokens=900):
+        async for token in llm.chat_stream(system_prompt=SYNTHESIZER_PROMPT, user_prompt=synthesis_user, temperature=0.4, max_tokens=650):
             yield json.dumps({"type": "token", "content": token}) + "\n"
 
         # done

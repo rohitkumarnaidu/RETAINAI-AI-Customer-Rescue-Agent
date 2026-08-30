@@ -672,3 +672,52 @@ class ChatMessage(Base):
         Index("idx_chat_msg_customer", "customer_id"),
         {"extend_existing": True},
     )
+
+
+# ── Any Dataset (Generic) — supports any CSV/JSON beyond the 4 canonical ──────────
+
+class GenericDataset(Base):
+    """Any dataset uploaded by tenant — beyond the 4 canonical (customers/usage/support/feedback).
+
+    Enables true 'any dataset' dynamic: each CSV becomes a dataset with arbitrary headers,
+    stored as JSON rows + headers, tenant-isolated, queryable by dataset_name.
+    """
+    __tablename__ = "generic_datasets"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
+    dataset_name: Mapped[str] = mapped_column(String(100), nullable=False)  # e.g., 'my_orders', 'custom_feedback_2024'
+    filename: Mapped[str] = mapped_column(String(200), nullable=False)
+    headers: Mapped[List[str]] = mapped_column(JSON, nullable=False)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    size_kb: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("idx_generic_tenant", "tenant_id"),
+        Index("idx_generic_name", "dataset_name"),
+        Index("idx_generic_tenant_name", "tenant_id", "dataset_name"),
+        {"extend_existing": True},
+    )
+
+
+class GenericRecord(Base):
+    """Row inside a GenericDataset — arbitrary JSON payload per row."""
+    __tablename__ = "generic_records"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
+    dataset_id: Mapped[str] = mapped_column(String(80), ForeignKey("generic_datasets.id", ondelete="CASCADE"), nullable=False, index=True)
+    dataset_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    customer_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    row_data: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
+    row_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("idx_genrec_tenant", "tenant_id"),
+        Index("idx_genrec_dataset", "dataset_id"),
+        Index("idx_genrec_name", "dataset_name"),
+        Index("idx_genrec_customer", "customer_id"),
+        {"extend_existing": True},
+    )

@@ -140,6 +140,29 @@ export const getSampleStats = async (): Promise<{customers:number;usage:number;t
   const r = await api.get('/system/sample-stats');
   return r.data;
 };
+export const getDatasets = async (): Promise<{canonical:any[];generic:any[];total:number}> => {
+  const r = await api.get('/datasets');
+  return r.data;
+};
+export const uploadGenericDataset = async (file: File, datasetName?: string): Promise<{dataset_id:string;dataset_name:string;headers:string[];rows:number}> => {
+  const fd = new FormData();
+  fd.append('file', file);
+  if(datasetName) fd.append('dataset_name', datasetName);
+  const r = await api.post('/datasets/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  return r.data;
+};
+export const getDatasetRecords = async (datasetName:string, limit=50, offset=0, search=""): Promise<{dataset_name:string;headers?:string[];rows:any[];total?:number}> => {
+  const r = await api.get(`/datasets/${encodeURIComponent(datasetName)}/records`, { params: { limit, offset, search } });
+  return r.data;
+};
+export const deleteDataset = async (datasetName:string): Promise<{deleted:string}> => {
+  const r = await api.delete(`/datasets/${encodeURIComponent(datasetName)}`);
+  return r.data;
+};
+export const replayAcmeStep = async (step: string): Promise<any> => {
+  const r = await api.post(`/agent/demo/replay_acme_step?step=${encodeURIComponent(step)}`);
+  return r.data;
+};
 
 // — Parallel Multi-Agent Chat (5 agents + streaming) —
 export interface ChatMessage { id:string; role:string; content:string; agent_traces?:any[]; model?:string; latency_ms?:number; created_at?:string; }

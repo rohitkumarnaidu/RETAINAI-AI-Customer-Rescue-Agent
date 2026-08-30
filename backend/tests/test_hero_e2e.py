@@ -42,7 +42,6 @@ async def test_hero_full_loop(db):
     # 1. Initial investigation
     res1 = await orch.run_full_rescue_workflow(cid)
     assert res1["risk_assessment"]["health_score"] < 80
-    first_action = res1["retention_plan"]["action_type"]
     # 2. Inject friction: ticket + feedback
     ingestion = EventIngestionService(db)
     await ingestion.ingest_event(customer_id=cid, event_type="SUPPORT_TICKET", payload={"id":"TICK-HERO-1","severity":"HIGH","subject":"Export bug","status":"OPEN"}, timestamp=now)
@@ -50,6 +49,8 @@ async def test_hero_full_loop(db):
     # 3. Re-investigate -> risk should stay high / increase, root cause shift toward support friction
     res2 = await orch.run_full_rescue_workflow(cid)
     assert "UNRESOLVED_CRITICAL_SUPPORT_TICKET" in res2["risk_assessment"]["signals"]
+    # Capture action from res2 (the one that creates first candidate) for pattern matching — generic fallback now differentiates res1 vs res2
+    first_action = res2["retention_plan"]["action_type"]
     # 4. Human approve
     svc = InterventionService(db)
     approved = await svc.approve_intervention(res2["intervention_id"])

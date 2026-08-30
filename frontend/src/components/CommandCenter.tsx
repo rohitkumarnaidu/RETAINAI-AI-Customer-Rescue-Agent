@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { getPortfolio, getCustomers, getCustomerTimeline } from '../services/api';
+import { getPortfolio, getCustomers, getCustomerTimeline, getDatasets } from '../services/api';
 import { RiskBadge, HealthRing } from './RiskBadge';
 import { Card, SkeletonCard, ErrorState, EmptyState } from './ui';
-import { TrendingDown, ShieldAlert, Activity, Clock, ArrowUpRight, FileSpreadsheet, Upload, MessageSquare, LifeBuoy, Users } from 'lucide-react';
+import { TrendingDown, ShieldAlert, Activity, Clock, ArrowUpRight, FileSpreadsheet, Upload, MessageSquare, LifeBuoy, Users, Database } from 'lucide-react';
 
 export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({onSelectCustomer})=>{
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [datasetFilter, setDatasetFilter] = useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
+  const [datasetFilter, setDatasetFilter] = useState<string>('all');
+  const [availableDatasets, setAvailableDatasets] = useState<{canonical:any[];generic:any[]}>({canonical:[], generic:[]});
   const [datasetCounts, setDatasetCounts] = useState<{usage:number;support:number;feedback:number} | null>(null);
   const load = async()=>{
     try{ setLoading(true); setError(null); const p=await getPortfolio(); setData(p);
-      // fetch 4 dataset counts live
+      // fetch any datasets (4 canonical + any generic) and counts
       try{
+        const ds = await getDatasets().catch(()=> null);
+        if(ds) setAvailableDatasets({canonical: ds.canonical||[], generic: ds.generic||[]});
         const cs = p?.customers || await getCustomers().catch(()=>[]);
         const slice = (cs as any[]).slice(0, 10);
         const tls = await Promise.all(slice.map((c:any)=> getCustomerTimeline(c.id, 30).catch(()=>[])));
