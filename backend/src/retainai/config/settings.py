@@ -40,7 +40,14 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     AUTH_ENABLED: bool = False
     AUTH_SECRET: str = "retainai-dev-secret-change-in-prod"
+    JWT_SECRET: str = "retainai-dev-secret-change-in-prod"
+    APP_SECRET_KEY: str = "retainai-dev-app-secret-change-in-prod-32chars"
     DEMO_API_KEY: str = "demo-key-retainai-2026"
+    API_KEY: str = "demo-key-retainai-2026"
+    DEMO_TENANT_ID: str = "demo-tenant-001"
+    DEMO_ORG_KEY: str = "demo-org-key-001"
+    FEATURE_TENANCY: bool = False
+    CHROMA_PERSIST_DIR: str = "./chroma_data"
 
     # Timeouts & Retry (S62/S63)
     AGENT_TIMEOUT: int = 60

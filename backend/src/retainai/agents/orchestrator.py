@@ -50,14 +50,56 @@ VALID_TRANSITIONS = {
 
 
 class AgentOrchestrator:
-    """Master Orchestrator driving closed-loop retention intelligence with explicit state machine."""
+    """Master Orchestrator driving closed-loop retention intelligence with explicit state machine — Tenant-Isolated (Phase 3 per-tenant LLM & prompts)."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, tenant_id: str | None = None):
         self.session = session
-        self.tools = AgentTools(session)
-        self.customer_service = CustomerService(session)
+        self.tenant_id = tenant_id
+        self.tools = AgentTools(session, tenant_id=tenant_id)
+        self.customer_service = CustomerService(session, tenant_id=tenant_id)
+        # LLMClient will be lazily resolved per-tenant in run_full_rescue_workflow; init with defaults for now
         self.investigation_agent = InvestigationAgent()
         self.action_agent = ActionStrategyAgent()
+        self._tenant_llm_config: Optional[Dict[str, Any]] = None
+        self._tenant_prompts: Optional[Dict[str, str]] = None
+
+    async def _load_tenant_llm_and_prompts(self):
+        """Load OrgSettings llm_provider/model/api_key and prompts for current tenant. Returns (llm_client, prompts)."""
+        if not self.tenant_id:
+            return None, {}
+        try:
+            from sqlalchemy import select
+            from retainai.db.models import OrgSettings
+            from retainai.auth.auth import decrypt_api_key
+            from retainai.agents.llm_client import LLMClient
+            res = await self.session.execute(select(OrgSettings).where(OrgSettings.tenant_id == self.tenant_id))
+            org = res.scalar_one_or_none()
+            if not org:
+                return None, {}
+            # LLM
+            provider = org.llm_provider or None
+            model = org.llm_model or None
+            api_key = None
+            if org.llm_api_key_encrypted:
+                try:
+                    api_key = decrypt_api_key(org.llm_api_key_encrypted)
+                except Exception:
+                    api_key = None
+            llm_client = None
+            if provider or model or api_key:
+                llm_client = LLMClient(api_key=api_key, model=model, provider=provider)
+                self._tenant_llm_config = {"provider": provider, "model": model, "has_key": bool(api_key)}
+            # Prompts
+            prompts: Dict[str, str] = {}
+            if org.investigation_prompt:
+                prompts["investigation"] = org.investigation_prompt
+            if org.action_prompt:
+                prompts["action"] = org.action_prompt
+            self._tenant_prompts = prompts
+            return llm_client, prompts
+        except Exception as e:
+            logger.debug(f"_load_tenant_llm_and_prompts failed for tenant {self.tenant_id}: {e}")
+            return None, {}
 
     def _validate_state_transition(self, current: str, next_state: str):
         """Validate state machine transition is allowed."""
@@ -91,6 +133,7 @@ class AgentOrchestrator:
         # Persist AgentStep
         step = AgentStep(
             id=f"step_{agent_run.id}_{uuid.uuid4().hex[:6]}",
+            tenant_id=self.tenant_id,
             run_id=agent_run.id,
             step_type=new_state,
             state=new_state,
@@ -142,6 +185,7 @@ class AgentOrchestrator:
         # Initialize Agent Run Audit log with explicit state
         agent_run = AgentRun(
             id=run_id,
+            tenant_id=self.tenant_id,
             customer_id=customer_id,
             started_at=now,
             status=AgentRunStatus.RUNNING,
@@ -259,6 +303,7 @@ class AgentOrchestrator:
                 from retainai.db.models import RiskLevel as _RL
                 fallback_ra = _RA2(
                     id=f"risk_{customer_id[:5]}_{uuid.uuid4().hex[:6]}",
+                    tenant_id=self.tenant_id,
                     customer_id=customer_id,
                     health_score=reassessment.get("health_score", 50.0),
                     risk_level=_RL(reassessment.get("risk_level", "WATCH")),
@@ -274,6 +319,7 @@ class AgentOrchestrator:
                 risk_assessment_id = fallback_ra.id
             inv_record = InvestigationReport(
                 id=investigation_id,
+                tenant_id=self.tenant_id,
                 customer_id=customer_id,
                 risk_assessment_id=risk_assessment_id,
                 created_at=now,
@@ -326,6 +372,7 @@ class AgentOrchestrator:
             intervention_id = f"int_plan_{customer_id[:5]}_{uuid.uuid4().hex[:6]}"
             intervention_record = Intervention(
                 id=intervention_id,
+                tenant_id=self.tenant_id,
                 customer_id=customer_id,
                 investigation_id=investigation_id,
                 recommendation_id=f"rec_{uuid.uuid4().hex[:8]}",

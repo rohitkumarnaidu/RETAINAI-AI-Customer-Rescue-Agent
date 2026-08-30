@@ -1,7 +1,7 @@
 """Deterministic Risk Engine for Risk Level mapping & Insufficient Data detection."""
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 from retainai.config.settings import settings
 from retainai.db.models import RiskLevel
 from retainai.engine.health_engine import HealthComponents
@@ -49,16 +49,36 @@ class RiskEngine:
     """Evaluates risk levels and checks for sparse data conditions."""
 
     @staticmethod
-    def map_health_to_risk_level(health_score: float) -> RiskLevel:
-        if health_score < settings.RISK_CRITICAL_THRESHOLD:
+    def map_health_to_risk_level(health_score: float, thresholds: Optional[dict] = None) -> RiskLevel:
+        # Per-tenant thresholds if provided, else global settings
+        if thresholds:
+            try:
+                crit = float(thresholds.get("critical", settings.RISK_CRITICAL_THRESHOLD))
+                high = float(thresholds.get("high", settings.RISK_HIGH_THRESHOLD))
+                at_risk = float(thresholds.get("at_risk", settings.RISK_AT_RISK_THRESHOLD))
+                watch = float(thresholds.get("watch", settings.RISK_WATCH_THRESHOLD))
+                healthy = float(thresholds.get("healthy", settings.RISK_HEALTHY_THRESHOLD))
+            except Exception:
+                crit = settings.RISK_CRITICAL_THRESHOLD
+                high = settings.RISK_HIGH_THRESHOLD
+                at_risk = settings.RISK_AT_RISK_THRESHOLD
+                watch = settings.RISK_WATCH_THRESHOLD
+                healthy = settings.RISK_HEALTHY_THRESHOLD
+        else:
+            crit = settings.RISK_CRITICAL_THRESHOLD
+            high = settings.RISK_HIGH_THRESHOLD
+            at_risk = settings.RISK_AT_RISK_THRESHOLD
+            watch = settings.RISK_WATCH_THRESHOLD
+            healthy = settings.RISK_HEALTHY_THRESHOLD
+        if health_score < crit:
             return RiskLevel.CRITICAL
-        elif health_score < settings.RISK_HIGH_THRESHOLD:
+        elif health_score < high:
             return RiskLevel.HIGH_RISK
-        elif health_score < settings.RISK_AT_RISK_THRESHOLD:
+        elif health_score < at_risk:
             return RiskLevel.AT_RISK
-        elif health_score < settings.RISK_WATCH_THRESHOLD:
+        elif health_score < watch:
             return RiskLevel.WATCH
-        elif health_score < settings.RISK_HEALTHY_THRESHOLD:
+        elif health_score < healthy:
             return RiskLevel.STABLE
         else:
             return RiskLevel.HEALTHY
@@ -72,6 +92,7 @@ class RiskEngine:
         customer_id: str = "",
         previous_risk_score: float | None = None,
         previous_health: float | None = None,
+        thresholds: Optional[dict] = None,
     ) -> RiskResult:
         # Insufficient data safeguard: <3 total events
         if total_data_points < 3:
@@ -92,7 +113,7 @@ class RiskEngine:
                 assessment_version="v2.1-risk",
             )
 
-        risk_lvl = cls.map_health_to_risk_level(health.overall_health)
+        risk_lvl = cls.map_health_to_risk_level(health.overall_health, thresholds=thresholds)
         raw_risk_score = min(1.0, max(0.0, (100.0 - health.overall_health) / 100.0))
 
         # Collect evidence IDs from detected signals

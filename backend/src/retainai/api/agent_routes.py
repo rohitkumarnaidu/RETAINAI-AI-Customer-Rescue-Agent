@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from retainai.db.session import get_db
-from retainai.auth.auth import get_current_user
+from retainai.auth.auth import get_current_user, require_tenant
 from retainai.db.models import AgentRun
 from retainai.agents.orchestrator import AgentOrchestrator
 from retainai.demo.acme_replay import AcmeReplayEngine
@@ -14,9 +14,9 @@ router = APIRouter(prefix="/api/v1/agent", tags=["Agent Operations"])
 
 
 @router.post("/investigate/{customer_id}")
-async def trigger_agent_investigation(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def trigger_agent_investigation(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user), tenant_id: str = Depends(require_tenant)):
     """Triggers the Agent Orchestrator to investigate customer telemetry and generate next-best action."""
-    orchestrator = AgentOrchestrator(db)
+    orchestrator = AgentOrchestrator(db, tenant_id=tenant_id)
     try:
         return await orchestrator.run_full_rescue_workflow(customer_id)
     except Exception as e:
@@ -24,8 +24,8 @@ async def trigger_agent_investigation(customer_id: str, db: AsyncSession = Depen
 
 
 @router.post("/{customer_id}/investigate")
-async def trigger_agent_investigation_alias(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
-    orchestrator = AgentOrchestrator(db)
+async def trigger_agent_investigation_alias(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user), tenant_id: str = Depends(require_tenant)):
+    orchestrator = AgentOrchestrator(db, tenant_id=tenant_id)
     try:
         return await orchestrator.run_full_rescue_workflow(customer_id)
     except Exception as e:
@@ -33,13 +33,14 @@ async def trigger_agent_investigation_alias(customer_id: str, db: AsyncSession =
 
 
 @router.get("/runs/{customer_id}")
-async def list_agent_runs(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def list_agent_runs(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user), tenant_id: str = Depends(require_tenant)):
     """Retrieves audit run history for an agent workflow on a customer."""
-    res = await db.execute(
-        select(AgentRun)
-        .where(AgentRun.customer_id == customer_id)
-        .order_by(AgentRun.started_at.desc())
-    )
+    # Tenant filter
+    q = select(AgentRun).where(AgentRun.customer_id == customer_id)
+    if tenant_id:
+        q = q.where((AgentRun.tenant_id == tenant_id) | (AgentRun.tenant_id.is_(None)))
+    q = q.order_by(AgentRun.started_at.desc())
+    res = await db.execute(q)
     runs = res.scalars().all()
     return [
         {
@@ -60,7 +61,7 @@ async def list_agent_runs(customer_id: str, db: AsyncSession = Depends(get_db), 
 
 @router.post("/demo/replay_acme_step")
 async def replay_acme_scenario_step(
-    step: str = "friction", intervention_id: str = "inv_acme_001", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
+    step: str = "friction", intervention_id: str = "inv_acme_001", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user), tenant_id: str = Depends(require_tenant)
 ):
     """Demo Helper Endpoint: Replays Acme scenario story steps ('healthy', 'friction', 'recovery')."""
     engine = AcmeReplayEngine(db)

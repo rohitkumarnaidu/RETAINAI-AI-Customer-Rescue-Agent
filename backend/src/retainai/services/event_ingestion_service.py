@@ -19,10 +19,11 @@ SIGNIFICANT_EVENT_TYPES = {"SUPPORT_TICKET", "CUSTOMER_FEEDBACK", "USAGE_EVENT",
 
 
 class EventIngestionService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, tenant_id: str | None = None):
         self.db = db
-        self.telemetry_repo = TelemetryRepository(db)
-        self.customer_service = CustomerService(db)
+        self.tenant_id = tenant_id
+        self.telemetry_repo = TelemetryRepository(db, tenant_id=tenant_id)
+        self.customer_service = CustomerService(db, tenant_id=tenant_id)
 
     def _compute_event_hash(self, customer_id: str, event_type: str, payload: Dict[str, Any], ts: datetime) -> str:
         """Deterministic hash for idempotency."""
@@ -122,6 +123,7 @@ class EventIngestionService:
         if event_type == "USAGE_EVENT":
             usage = UsageEvent(
                 id=payload.get("id") or f"usg_{customer_id[:5]}_{int(ts.timestamp())}",
+                tenant_id=self.tenant_id,
                 customer_id=customer_id,
                 timestamp=ts,
                 daily_active_users=payload.get("daily_active_users", 0),
@@ -135,6 +137,7 @@ class EventIngestionService:
         elif event_type == "SUPPORT_TICKET":
             ticket = SupportTicket(
                 id=payload.get("id") or f"tck_{customer_id[:5]}_{int(ts.timestamp())}",
+                tenant_id=self.tenant_id,
                 customer_id=customer_id,
                 created_at=ts,
                 severity=payload.get("severity", "MEDIUM"),
@@ -149,6 +152,7 @@ class EventIngestionService:
         elif event_type == "CUSTOMER_FEEDBACK":
             fb = CustomerFeedback(
                 id=payload.get("id") or f"fb_{customer_id[:5]}_{int(ts.timestamp())}",
+                tenant_id=self.tenant_id,
                 customer_id=customer_id,
                 created_at=ts,
                 source=payload.get("source", "CSAT_SURVEY"),
@@ -162,6 +166,7 @@ class EventIngestionService:
         elif event_type == "ACCOUNT_EVENT":
             evt = AccountEvent(
                 id=f"acct_{customer_id[:5]}_{int(ts.timestamp())}",
+                tenant_id=self.tenant_id,
                 customer_id=customer_id,
                 timestamp=ts,
                 event_type=payload.get("event_type", "GENERIC_EVENT"),
@@ -179,6 +184,7 @@ class EventIngestionService:
         # Log system event with deduplication hash
         sys_log = SystemEventLog(
             id=f"log_{uuid.uuid4().hex[:10]}",
+            tenant_id=self.tenant_id,
             timestamp=ts,
             customer_id=customer_id,
             event_type="EVENT_INGESTED",

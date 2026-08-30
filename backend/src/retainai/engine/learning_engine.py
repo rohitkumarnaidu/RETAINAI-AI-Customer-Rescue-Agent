@@ -26,12 +26,22 @@ MIN_SAMPLE_SIZE = 2
 
 
 class LearningEngine:
-    """Evaluates post-intervention health deltas and applies the Experience Memory validation gate."""
+    """Evaluates post-intervention health deltas and applies the Experience Memory validation gate. Tenant-scoped."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, tenant_id: Optional[str] = None):
         self.db = db
-        self.intervention_repo = InterventionRepository(db)
-        self.memory_repo = MemoryRepository(db)
+        self.tenant_id = tenant_id
+        self.intervention_repo = InterventionRepository(db, tenant_id=tenant_id)
+        self.memory_repo = MemoryRepository(db, tenant_id=tenant_id)
+
+    def _resolve_tenant(self, intervention: Optional[Intervention] = None, candidate: Optional[LearningCandidate] = None) -> Optional[str]:
+        if self.tenant_id:
+            return self.tenant_id
+        if intervention and getattr(intervention, "tenant_id", None):
+            return intervention.tenant_id
+        if candidate and getattr(candidate, "tenant_id", None):
+            return candidate.tenant_id
+        return None
 
     async def evaluate_intervention_outcome(
         self,
@@ -110,6 +120,15 @@ class LearningEngine:
         intervention = await self.intervention_repo.get_by_id(intervention_id)
         if intervention:
             outcome.customer_id = intervention.customer_id
+            # Propagate tenant_id from intervention to outcome
+            resolved_tenant = self._resolve_tenant(intervention)
+            if resolved_tenant:
+                outcome.tenant_id = resolved_tenant
+                if not self.tenant_id:
+                    self.tenant_id = resolved_tenant
+                    # Update repos to be tenant-scoped if we just resolved
+                    self.intervention_repo = InterventionRepository(self.db, tenant_id=resolved_tenant)
+                    self.memory_repo = MemoryRepository(self.db, tenant_id=resolved_tenant)
             if not outcome.evidence_ids:
                 outcome.evidence_ids = [intervention.id]
             # Idempotency: if outcome already exists for this intervention, return existing (S64)
@@ -145,6 +164,8 @@ class LearningEngine:
         except Exception:
             segment = "Enterprise"
 
+        # Tenant-scoped pattern
+        tid = self._resolve_tenant(intervention)
         pattern = f"{segment} :: {intervention.action_type}"
         context_json = {
             "segment": segment,
@@ -153,12 +174,13 @@ class LearningEngine:
             "health_after": outcome.health_after,
             "health_delta": outcome.health_delta,
             "intervention_title": intervention.title,
+            "tenant_id": tid,
         }
         # Calculate confidence with sample awareness
         # Start low for single observation, increase with repetitions
         base_conf = 0.68 if outcome.outcome == "SUCCESS" else 0.45
-        # Check existing candidates for same pattern to boost sample_size
-        existing = await self._get_candidates_for_pattern(pattern)
+        # Check existing candidates for same pattern to boost sample_size — tenant-scoped
+        existing = await self._get_candidates_for_pattern(pattern, tenant_id=tid)
         sample_size = len(existing) + 1
         confidence = min(0.95, base_conf + (sample_size -1)*0.12)
 
@@ -170,6 +192,7 @@ class LearningEngine:
 
         candidate = LearningCandidate(
             id=candidate_id,
+            tenant_id=tid,
             customer_id=intervention.customer_id,
             intervention_id=intervention.id,
             pattern=pattern,
@@ -191,8 +214,13 @@ class LearningEngine:
         # Validation gate: promote only if meets thresholds
         await self._validation_gate(candidate, pattern, existing)
 
-    async def _get_candidates_for_pattern(self, pattern: str) -> List[LearningCandidate]:
-        res = await self.db.execute(select(LearningCandidate).where(LearningCandidate.pattern == pattern).order_by(LearningCandidate.created_at.desc()).limit(10))
+    async def _get_candidates_for_pattern(self, pattern: str, tenant_id: Optional[str] = None) -> List[LearningCandidate]:
+        tid = tenant_id or self.tenant_id
+        q = select(LearningCandidate).where(LearningCandidate.pattern == pattern)
+        if tid:
+            q = q.where(LearningCandidate.tenant_id == tid)
+        q = q.order_by(LearningCandidate.created_at.desc()).limit(10)
+        res = await self.db.execute(q)
         return list(res.scalars().all())
 
     async def _validation_gate(self, candidate: LearningCandidate, pattern: str, existing: List[LearningCandidate]):
@@ -226,9 +254,10 @@ class LearningEngine:
         await self._promote_to_memory(candidate, pattern)
 
     async def _promote_to_memory(self, candidate: LearningCandidate, pattern: str):
-        """Convert validated candidate to ExperienceMemory with structured experience."""
-        # Check for existing memory with same pattern to update instead of duplicate
-        existing_mem = await self.memory_repo.get_by_pattern(pattern)
+        """Convert validated candidate to ExperienceMemory with structured experience. Tenant-scoped."""
+        tid = candidate.tenant_id or self.tenant_id
+        # Check for existing memory with same pattern to update instead of duplicate — tenant-scoped
+        existing_mem = await self.memory_repo.get_by_pattern(pattern, tenant_id=tid)
         if existing_mem:
             # Update existing memory: increment success_count, recalc confidence, update provenance
             existing_mem.success_count += 1
@@ -255,6 +284,7 @@ class LearningEngine:
         segment = candidate.context_json.get("segment", "Enterprise")
         memory = ExperienceMemory(
             id=memory_id,
+            tenant_id=tid,
             pattern=pattern,
             context_pattern=f"{segment} Account Recovery — {candidate.intervention_type}",
             customer_segment=segment,
@@ -278,10 +308,10 @@ class LearningEngine:
             version="v2.1",
         )
         await self.memory_repo.add_memory(memory)
-        # Also index in Chroma for semantic retrieval
+        # Also index in Chroma for semantic retrieval — tenant-namespaced collection
         try:
             from retainai.integrations.chroma_memory import get_chroma_store
-            await get_chroma_store().upsert(memory_id=memory.id, pattern=pattern, segment=segment, text=f"{pattern} {candidate.observed_outcome}", metadata={"confidence": candidate.confidence, "sample_size": candidate.sample_size})
+            await get_chroma_store().upsert(memory_id=memory.id, pattern=pattern, segment=segment, text=f"{pattern} {candidate.observed_outcome}", metadata={"confidence": candidate.confidence, "sample_size": candidate.sample_size, "tenant_id": tid}, tenant_id=tid)
         except Exception as e:
             logger.warning(f"Chroma upsert skipped: {e}")
         candidate.validation_status = ValidationStatus.VALIDATED

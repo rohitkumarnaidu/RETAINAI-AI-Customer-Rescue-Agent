@@ -1,11 +1,14 @@
-"""Database Seeding Script for RETAINAI Dataset (101 Customers)."""
+"""Database Seeding Script for RETAINAI Dataset (101 Customers) — Tenant-Isolated Phase 1."""
 
 import asyncio
 import json
 import logging
+import os
+import uuid
 from pathlib import Path
 from datetime import datetime, date, timedelta, timezone
 from retainai.db.session import engine, Base, AsyncSessionLocal
+from retainai.config.settings import settings
 from retainai.db.models import (
     Customer,
     RiskLevel,
@@ -14,6 +17,10 @@ from retainai.db.models import (
     CustomerFeedback,
     ExperienceMemory,
     ValidationStatus,
+    Tenant,
+    User,
+    OrgSettings,
+    UserRole,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -70,8 +77,16 @@ ARCHETYPE_HEALTH_MAP = {
 }
 
 
-async def seed_demo_data():
-    logger.info("Initializing database schema...")
+async def seed_demo_data(tenant_id: str | None = None, tenant_name: str | None = None):
+    """Seed demo data per-tenant — tenant-isolated Phase 1.
+
+    - Ensures Tenant + User + OrgSettings exist
+    - Drops and recreates schema (demo reset)
+    - Inserts all records with tenant_id = demo-tenant-001 or provided tenant_id
+    """
+    demo_tid = tenant_id or os.getenv("DEMO_TENANT_ID") or getattr(settings, "DEMO_TENANT_ID", "demo-tenant-001")
+    demo_org = tenant_name or "Demo Org"
+    logger.info(f"Initializing database schema for tenant {demo_tid}...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
@@ -82,8 +97,33 @@ async def seed_demo_data():
         dataset = json.load(f)
 
     async with AsyncSessionLocal() as db:
+        # Create Tenant + OrgSettings + default admin user (idempotent after drop_all, always fresh)
+        tenant = Tenant(id=demo_tid, name=demo_org)
+        db.add(tenant)
+        # Flush to ensure FK
+        await db.flush()
+        # OrgSettings per-tenant
+        org_settings = OrgSettings(tenant_id=demo_tid)
+        db.add(org_settings)
+        # Default admin user
+        try:
+            from retainai.auth.auth import hash_password
+            ph = hash_password("demo123")
+        except Exception:
+            import hashlib
+            ph = hashlib.sha256(b"demo123").hexdigest()
+        # Check if user exists (should not after drop_all)
+        admin_user = User(id=f"user_{uuid.uuid4().hex[:8]}", tenant_id=demo_tid, email="admin@retainai.io", password_hash=ph, role=UserRole.ADMIN)
+        db.add(admin_user)
+        # Additional demo users for role testing
+        csm_user = User(id=f"user_{uuid.uuid4().hex[:8]}", tenant_id=demo_tid, email="csm@retainai.io", password_hash=ph, role=UserRole.MEMBER)
+        viewer_user = User(id=f"user_{uuid.uuid4().hex[:8]}", tenant_id=demo_tid, email="viewer@retainai.io", password_hash=ph, role=UserRole.VIEWER)
+        db.add(csm_user)
+        db.add(viewer_user)
+        await db.flush()
+
         customers_data = dataset.get("customers", [])
-        logger.info(f"Seeding {len(customers_data)} customer records...")
+        logger.info(f"Seeding {len(customers_data)} customer records for tenant {demo_tid}...")
 
         for c in customers_data:
             arch = c.get("archetype", "HEALTHY")
@@ -93,6 +133,7 @@ async def seed_demo_data():
 
             cust = Customer(
                 id=c["id"],
+                tenant_id=demo_tid,
                 external_id=c.get("external_id") or f"ext-{c['id'][:8]}",
                 name=c["name"],
                 domain=c.get("domain") or c.get("website") or f"{c['name'].lower().replace(' ', '')}.com",
@@ -114,7 +155,7 @@ async def seed_demo_data():
             db.add(cust)
 
         usage_data = dataset.get("usage_events", [])
-        logger.info(f"Seeding {len(usage_data)} usage event records...")
+        logger.info(f"Seeding {len(usage_data)} usage event records for tenant {demo_tid}...")
         for u in usage_data:
             ts = parse_dt(u.get("timestamp")) or datetime.now(timezone.utc)
             dau_val = int(u.get("dau") or u.get("daily_active_users") or 0)
@@ -124,6 +165,7 @@ async def seed_demo_data():
 
             usage_evt = UsageEvent(
                 id=u["id"],
+                tenant_id=demo_tid,
                 customer_id=u["customer_id"],
                 timestamp=ts,
                 daily_active_users=dau_val,
@@ -143,13 +185,14 @@ async def seed_demo_data():
             db.add(usage_evt)
 
         ticket_data = dataset.get("support_tickets", [])
-        logger.info(f"Seeding {len(ticket_data)} support ticket records...")
+        logger.info(f"Seeding {len(ticket_data)} support ticket records for tenant {demo_tid}...")
         for t in ticket_data:
             created_dt = parse_dt(t.get("created_at")) or datetime.now(timezone.utc)
             resolved_dt = parse_dt(t.get("resolved_at"))
 
             ticket = SupportTicket(
                 id=t["id"],
+                tenant_id=demo_tid,
                 customer_id=t["customer_id"],
                 external_ticket_id=t.get("external_ticket_id") or f"ext-{t['id'][:8]}",
                 created_at=created_dt,
@@ -164,7 +207,7 @@ async def seed_demo_data():
             db.add(ticket)
 
         feedback_data = dataset.get("customer_feedbacks", [])
-        logger.info(f"Seeding {len(feedback_data)} customer feedback records...")
+        logger.info(f"Seeding {len(feedback_data)} customer feedback records for tenant {demo_tid}...")
         for f in feedback_data:
             created_dt = parse_dt(f.get("timestamp") or f.get("created_at")) or datetime.now(timezone.utc)
             s_val = f.get("sentiment", "NEUTRAL")
@@ -176,6 +219,7 @@ async def seed_demo_data():
 
             fb = CustomerFeedback(
                 id=f["id"],
+                tenant_id=demo_tid,
                 customer_id=f["customer_id"],
                 created_at=created_dt,
                 source=f.get("channel") or f.get("source", "CSAT_SURVEY"),
@@ -188,9 +232,10 @@ async def seed_demo_data():
             )
             db.add(fb)
 
-        # Seed initial Experience Memory Bank
+        # Seed initial Experience Memory Bank per-tenant
         mem1 = ExperienceMemory(
             id="mem-001",
+            tenant_id=demo_tid,
             context_pattern="Enterprise Account CSV Export Friction & Usage Drop",
             customer_segment="Enterprise",
             risk_pattern="HIGH_RISK_SUPPORT_BUG_FRICTION",
@@ -208,15 +253,16 @@ async def seed_demo_data():
 
         await db.commit()
         logger.info(
-            f"Database seeding completed successfully: {len(customers_data)} customers, "
+            f"Database seeding completed for tenant {demo_tid}: {len(customers_data)} customers, "
             f"{len(usage_data)} usage events, {len(ticket_data)} tickets, {len(feedback_data)} feedbacks."
         )
 
 
-async def seed_data():
-    await seed_demo_data()
+async def seed_data(tenant_id: str | None = None):
+    await seed_demo_data(tenant_id=tenant_id)
 
 
 if __name__ == "__main__":
-    asyncio.run(seed_demo_data())
-
+    import sys
+    tid_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    asyncio.run(seed_demo_data(tenant_id=tid_arg))

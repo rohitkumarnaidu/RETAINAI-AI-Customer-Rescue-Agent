@@ -11,8 +11,11 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void; initia
   const [error,setError]=useState<string|null>(null);
   const [q,setQ]=useState(''); const [seg,setSeg]=useState('ALL'); const [risk,setRisk]=useState('ALL'); const [sort,setSort]=useState<'name'|'health'|'arr'>('name');
 
+  // Phase 5: tenant-aware cache key — isolates per tenant without react-query/SWR (react-query would be ['customers', tenantId])
+  const tenantId = typeof window !== 'undefined' ? (localStorage.getItem('tenant_id') || localStorage.getItem('tenantId') || localStorage.getItem('jwt_tenant') || 'demo-tenant-001') : 'demo-tenant-001';
+  const cacheKey = `customers:${tenantId}`; // for react-query/SWR would be ['customers', tenantId]; here just a dep key
   const load=async()=>{ try{setLoading(true); const c=await getCustomers(); setCustomers(c);}catch(e:any){setError(e.message)} finally{setLoading(false)} };
-  useEffect(()=>{load()},[]);
+  useEffect(()=>{ load(); },[cacheKey]);
 
   const segs = useMemo(()=> Array.from(new Set(customers.map((c:any)=>c.segment))).filter(Boolean),[customers]);
 

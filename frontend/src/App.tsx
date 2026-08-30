@@ -6,12 +6,17 @@ import { InvestigationsView } from './components/InvestigationsView';
 import { InterventionsView } from './components/InterventionsView';
 import { LearningView } from './components/LearningView';
 import { AuditView } from './components/AuditView';
-import { resetDemo } from './services/api';
-import { LayoutDashboard, Users, UserCircle2, SearchCode, ClipboardList, GraduationCap, ScrollText, Shield, RefreshCw, Menu, X, FlaskConical, Upload } from 'lucide-react';
+import { Onboarding } from './components/Onboarding';
+import { SettingsView } from './components/SettingsView';
+import { LoginPage } from './pages/Login';
+import { useAuth } from './context/AuthContext';
+import { resetDemo, getCustomers } from './services/api';
+import { LayoutDashboard, Users, UserCircle2, SearchCode, ClipboardList, GraduationCap, ScrollText, Shield, RefreshCw, Menu, X, Upload, Settings, LogOut, LogIn } from 'lucide-react';
 
-type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit';
+type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit'|'onboarding'|'settings';
 
 export function App() {
+  const { user, tenantId, logout, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('command');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -19,6 +24,8 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
   const [customersImportOpen,setCustomersImportOpen]=useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [hasCustomers, setHasCustomers] = useState<boolean | null>(null);
 
   useEffect(()=>{ const id=setInterval(()=>setNow(new Date()),60000); return ()=>clearInterval(id)},[]);
   useEffect(()=>{
@@ -26,15 +33,30 @@ export function App() {
     let cancelled=false;
     (async()=>{
       try{
-        const mod = await import('./services/api');
-        const customers = await mod.getCustomers().catch(()=>[]);
-        if(!cancelled && customers.length>0 && !selectedCustomerId){
-          setSelectedCustomerId(customers[0].id);
+        const customers = await getCustomers().catch(()=>[]);
+        if(!cancelled){
+          setHasCustomers(customers.length>0);
+          if(customers.length>0 && !selectedCustomerId){
+            setSelectedCustomerId(customers[0].id);
+          } else if(customers.length===0 && !isAuthenticated){
+            // keep hasCustomers false to show onboarding prompt
+          }
         }
       }catch{}
     })();
     return ()=>{cancelled=true};
-  },[selectedCustomerId]);
+  },[selectedCustomerId, isAuthenticated]);
+  // poll hasCustomers when tab changes to keep onboarding prompt fresh
+  useEffect(()=>{
+    let cancelled=false;
+    (async()=>{
+      try{
+        const customers = await getCustomers().catch(()=>[]);
+        if(!cancelled) setHasCustomers(customers.length>0);
+      }catch{}
+    })();
+    return ()=>{cancelled=true};
+  },[activeTab]);
 
   const handleSelectCustomer = (customerId: string) => {
     setSelectedCustomerId(customerId);
@@ -64,6 +86,8 @@ export function App() {
     {id:'investigations', label:'Investigations', icon:SearchCode, desc:'Agent runs & evidence'},
     {id:'interventions', label:'Interventions', icon:ClipboardList, desc:'Plans & outcomes'},
     {id:'learning', label:'Learning', icon:GraduationCap, desc:'Experience memory'},
+    {id:'onboarding', label:'Onboarding', icon:Users, desc:'Import & connect'},
+    {id:'settings', label:'Settings', icon:Settings, desc:'Weights · LLM · Prompts'},
     {id:'audit', label:'Activity', icon:ScrollText, desc:'Audit trail'},
   ];
 
@@ -98,18 +122,29 @@ export function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-1.5 text-xs font-mono text-slate-500 border border-slate-200 bg-slate-50 px-2.5 py-1.5 rounded-lg">
-              <FlaskConical className="w-3.5 h-3.5" />
-              <span>Onboarding · Command</span>
-              <button onClick={()=>{ setActiveTab('customers'); window.scrollTo({top:0, behavior:'smooth'}); }} className="ml-1 bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700 hover:bg-slate-50">Onboarding</button>
-              <button onClick={()=>{ setActiveTab('command'); window.scrollTo({top:0, behavior:'smooth'}); }} className="ml-1 bg-slate-900 text-white border border-slate-900 px-2 py-0.5 rounded hover:bg-slate-800">Command</button>
+            <div className="hidden lg:flex items-center gap-1.5 text-xs font-mono text-slate-500 border border-slate-200 bg-slate-50 px-2.5 py-1.5 rounded-lg">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="truncate max-w-[180px]">{user?.email || 'demo@retainai.io'} · {tenantId || 'demo-tenant-001'}</span>
+              {hasCustomers===false && <span className="bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded">No customers</span>}
             </div>
-            <button onClick={()=>{ setCustomersImportOpen(true); setActiveTab('customers'); window.scrollTo({top:0, behavior:'smooth'}); }} className="hidden sm:inline-flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold">
-              <Upload className="w-3.5 h-3.5" /> Import CSV
+            <button onClick={()=>{ setActiveTab('onboarding'); window.scrollTo({top:0, behavior:'smooth'}); }} className="hidden sm:inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50">
+              <Users className="w-3.5 h-3.5" /> Onboarding
             </button>
+            <button onClick={()=>{ setCustomersImportOpen(true); setActiveTab('customers'); window.scrollTo({top:0, behavior:'smooth'}); }} className="hidden sm:inline-flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold">
+              <Upload className="w-3.5 h-3.5" /> Import
+            </button>
+            {isAuthenticated && user ? (
+              <button onClick={logout} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50">
+                <LogOut className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Logout</span>
+              </button>
+            ) : (
+              <button onClick={() => setShowLogin(true)} className="inline-flex items-center gap-1.5 bg-[#0F172A] text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800">
+                <LogIn className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Login</span>
+              </button>
+            )}
             <div className="flex items-center gap-1">
               <button onClick={handleResetDemo} disabled={resetting} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border disabled:opacity-50 ${confirmReset ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'bg-white hover:bg-slate-50 border-slate-200'}`}>
-                <RefreshCw className={`w-3.5 h-3.5 ${resetting? 'animate-spin':''}`} /> <span className="hidden sm:inline">{confirmReset ? 'Confirm reset?' : 'Reset demo'}</span>
+                <RefreshCw className={`w-3.5 h-3.5 ${resetting? 'animate-spin':''}`} /> <span className="hidden sm:inline">{confirmReset ? 'Confirm?' : 'Reset'}</span>
               </button>
               {confirmReset && <button onClick={()=>setConfirmReset(false)} className="text-xs border border-slate-200 bg-white px-2 py-1.5 rounded-lg hover:bg-slate-50">Cancel</button>}
             </div>
@@ -165,22 +200,42 @@ export function App() {
 
         <main className="flex-1 min-w-0">
           {toast && <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-3 py-2 rounded-lg">{toast}</div>}
+          {hasCustomers===false && activeTab==='command' && (
+            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold text-amber-900">No customers yet — start here</div>
+                <div className="text-xs text-amber-800 mt-1">Any user can bring their own data. Import CSV (any headers via Map columns), JSON batch, webhook, or use Onboarding wizard. Or click Reset to load sample 101.</div>
+              </div>
+              <button onClick={()=> setActiveTab('onboarding')} className="shrink-0 bg-amber-600 text-white px-3 py-2 rounded-lg text-xs font-semibold hover:bg-amber-700">Open Onboarding →</button>
+            </div>
+          )}
           {activeTab==='command' && <CommandCenter onSelectCustomer={handleSelectCustomer} />}
           {activeTab==='customers' && <CustomersView onSelectCustomer={handleSelectCustomer} initialShowImport={customersImportOpen} onImportConsumed={()=>setCustomersImportOpen(false)} />}
-          {activeTab==='customer360' && (selectedCustomerId ? <Customer360 customerId={selectedCustomerId} /> : <div className="bg-white border border-dashed border-slate-200 rounded-xl p-8 text-center"><div className="text-sm font-semibold">No customer selected</div><div className="text-xs text-slate-500 mt-1">Select an account from Command Center or Customers, or import your own data.</div><button onClick={()=>setActiveTab('command')} className="mt-3 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm">Go to Command Center</button></div>)}
+          {activeTab==='customer360' && (selectedCustomerId ? <Customer360 customerId={selectedCustomerId} /> : <div className="bg-white border border-dashed border-slate-200 rounded-xl p-8 text-center"><div className="text-sm font-semibold">No customer selected</div><div className="text-xs text-slate-500 mt-1">Select an account from Command Center or Customers, or import your own data via Onboarding.</div><div className="flex items-center justify-center gap-2 mt-3"><button onClick={()=>setActiveTab('command')} className="bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm">Go to Command Center</button><button onClick={()=>setActiveTab('onboarding')} className="border border-slate-200 bg-white px-4 py-2 rounded-lg text-sm">Onboarding</button></div></div>)}
           {activeTab==='investigations' && <InvestigationsView onSelectCustomer={handleSelectCustomer} />}
           {activeTab==='interventions' && <InterventionsView />}
           {activeTab==='learning' && <LearningView />}
+          {activeTab==='onboarding' && <Onboarding onComplete={()=> setActiveTab('command')} />}
+          {activeTab==='settings' && <SettingsView />}
           {activeTab==='audit' && <AuditView />}
         </main>
       </div>
 
       <footer className="border-t border-slate-200 bg-white mt-8">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 font-mono">
-          <span>RETAINAI · Evidence-based retention · No fabricated certainty</span>
+          <span>RETAINAI · Tenant {tenantId} · Evidence-based · No fabricated certainty</span>
           <span>Loop: SENSE → THINK → ACT → MEASURE → LEARN → REPEAT</span>
         </div>
       </footer>
+
+      {showLogin && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={()=>setShowLogin(false)}>
+          <div onClick={e=>e.stopPropagation()} className="w-full max-w-[480px]">
+            <LoginPage onSuccess={()=>{ setShowLogin(false); setToast('Logged in — tenant '+ (tenantId||'')); setTimeout(()=> setToast(null), 2000); window.location.reload(); }} />
+            <button onClick={()=>setShowLogin(false)} className="mt-3 mx-auto block text-xs text-white/80 hover:text-white">Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

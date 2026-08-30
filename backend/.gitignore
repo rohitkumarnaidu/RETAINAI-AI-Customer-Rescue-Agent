@@ -1,0 +1,35 @@
+# RETAINAI Backend — Phase 5 Hardening: ignore local SQLite + WAL artifacts
+# Local dev SQLite fallback (Postgres is prod default per docker-compose.yml / settings.py)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# WAL + shm already covered above, but explicit for clarity (see .gitignore root)
+retainai.db
+retainai.db-shm
+retainai.db-wal
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Env & secrets
+.env
+.env.local
+
+# Chroma local persist
+chroma_data/
+
+# Logs
+*.log
+tmp/

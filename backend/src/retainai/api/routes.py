@@ -7,13 +7,15 @@ import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
+logger = logging.getLogger("retainai.api")
 
 from retainai.db.session import get_db
-from retainai.auth.auth import get_current_user
-from retainai.db.models import Customer, RiskLevel, Intervention, InterventionStatus, InterventionOutcome
+from retainai.auth.auth import get_current_user, require_role, require_tenant
+from retainai.db.models import Customer, RiskLevel, Intervention, InterventionStatus, InterventionOutcome, OrgSettings
 from retainai.repositories.customer_repository import CustomerRepository
 from retainai.repositories.evidence_repository import EvidenceRepository
 from retainai.repositories.memory_repository import MemoryRepository
@@ -39,14 +41,66 @@ router = APIRouter(prefix="/api/v1")
 
 
 @router.post("/system/reset")
-async def reset_demo_database():
-    """Reset and re-seed database with all 101 dataset benchmark accounts (S59 gated)."""
+async def reset_demo_database(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_role(["ADMIN"])),
+):
+    """Reset and re-seed database with all 101 dataset benchmark accounts (S59 gated + Phase5 ADMIN + audit)."""
     from retainai.config import settings
+    # Prod hardening: ADMIN required via require_role above; additionally gate on DEBUG/DEMO_MODE for non-prod
     if not (settings.DEBUG or settings.DEMO_MODE):
-        raise HTTPException(status_code=403, detail="Demo reset disabled in production")
+        raise HTTPException(status_code=403, detail="Demo reset disabled in production (requires DEBUG or DEMO_MODE)")
+    # ── Phase 5 audit log (tenant-aware) ──
+    tenant_id = user.get("tenant_id") or user.get("tid") or getattr(request.state, "tenant_id", None) or "unknown"
+    client_ip = request.client.host if request.client and hasattr(request.client, "host") else "unknown"
+    logger.info(f"AUDIT system_reset requested tenant_id={tenant_id} user={user.get('email')} role={user.get('role')} ip={client_ip} path={request.url.path}")
+    try:
+        from retainai.db.models import SystemEventLog
+        import uuid as _uuid
+        from datetime import datetime, timezone
+        audit = SystemEventLog(
+            id=f"evt_{_uuid.uuid4().hex[:8]}",
+            tenant_id=tenant_id if tenant_id != "unknown" else None,
+            customer_id="system",
+            event_type="SYSTEM_RESET",
+            description=f"System reset requested by {user.get('email')} tenant={tenant_id}",
+            details={"user": user.get("email"), "tenant_id": tenant_id, "role": user.get("role"), "ip": client_ip},
+            timestamp=datetime.now(timezone.utc),
+        )
+        db.add(audit)
+        await db.commit()
+    except Exception as _ae:
+        logger.warning(f"audit log failed for reset tenant_id={tenant_id}: {_ae}")
+        try:
+            await db.rollback()
+        except Exception:
+            pass
     try:
         await seed_demo_data()
-        return {"status": "success", "message": "Database reset and re-seeded with 101 customers successfully"}
+        logger.info(f"AUDIT system_reset completed tenant_id={tenant_id} user={user.get('email')}")
+        # Also log completion audit
+        try:
+            from retainai.db.models import SystemEventLog as _SEL
+            import uuid as _uuid2
+            from datetime import datetime as _dt, timezone as _tz
+            audit2 = _SEL(
+                id=f"evt_{_uuid2.uuid4().hex[:8]}",
+                tenant_id=tenant_id if tenant_id != "unknown" else None,
+                customer_id="system",
+                event_type="SYSTEM_RESET_COMPLETED",
+                description=f"System reset completed tenant={tenant_id}",
+                details={"tenant_id": tenant_id, "user": user.get("email")},
+                timestamp=_dt.now(_tz.utc),
+            )
+            db.add(audit2)
+            await db.commit()
+        except Exception:
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+        return {"status": "success", "message": "Database reset and re-seeded with 101 customers successfully", "tenant_id": tenant_id, "audit": "logged"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database reset failed: {str(e)}")
 
@@ -55,6 +109,7 @@ async def reset_demo_database():
 async def list_customers(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant),
     limit: int = 200,
     offset: int = 0,
     risk_level: Optional[str] = None,
@@ -64,7 +119,7 @@ async def list_customers(
     sort_order: str = "asc",
 ):
     """List customers with pagination, filtering & sorting (S19)."""
-    repo = CustomerRepository(db)
+    repo = CustomerRepository(db, tenant_id=tenant_id)
     # Enforce bounds (S19)
     limit = max(1, min(limit, 500))
     offset = max(0, offset)
@@ -75,7 +130,8 @@ async def list_customers(
 
 
 @router.post("/customers", response_model=CustomerSchema)
-async def create_customer(payload: Dict[str, Any], db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def create_customer(payload: Dict[str, Any], db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Create a single customer — for Add Customer form + CSV single-row."""
     name = str(payload.get("name") or "").strip()
     if not name or len(name) < 2:
@@ -132,6 +188,7 @@ async def create_customer(payload: Dict[str, Any], db: AsyncSession = Depends(ge
     # Domain duplicate soft check — allow but warn via header? just allow
     customer = Customer(
         id=cid,
+        tenant_id=tenant_id,
         name=name,
         domain=domain,
         segment=segment,
@@ -163,6 +220,7 @@ async def upload_customers_csv(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant),
 ):
     """Bulk CSV upload — creates many customers. Max 500 rows, 2MB file."""
     # Guards
@@ -270,6 +328,7 @@ async def upload_customers_csv(
             risk_enum = RiskLevel.WATCH
         customer = Customer(
             id=cid,
+            tenant_id=tenant_id,
             name=name,
             domain=domain,
             segment=segment,
@@ -312,7 +371,8 @@ async def upload_customers_csv(
 
 
 @router.get("/customers/template/csv")
-async def download_customer_csv_template(user: dict = Depends(get_current_user)):
+async def download_customer_csv_template(user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Returns CSV template info — frontend generates file client-side but this documents schema."""
     headers = ["name","domain","segment","industry","plan","arr","mrr","csm_name","csm_email","health_score","risk_level","renewal_date","status"]
     sample = ["Acme Corp","acme.com","Enterprise","FinTech","Enterprise Tier","180000","15000","Alex Morgan","alex@retainai.io","42","CRITICAL","2026-09-15","ACTIVE"]
@@ -326,9 +386,10 @@ async def download_customer_csv_template(user: dict = Depends(get_current_user))
 
 
 @router.get("/customers/{customer_id}", response_model=CustomerSchema)
-async def get_customer(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def get_customer(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Get customer by ID."""
-    repo = CustomerRepository(db)
+    repo = CustomerRepository(db, tenant_id=tenant_id)
     customer = await repo.get_by_id(customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
@@ -336,30 +397,34 @@ async def get_customer(customer_id: str, db: AsyncSession = Depends(get_db), use
 
 
 @router.get("/customers/{customer_id}/timeline")
-async def get_customer_timeline(customer_id: str, days: int = 60, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def get_customer_timeline(customer_id: str, days: int = 60, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Get unified chronological customer timeline."""
     service = TimelineService(db)
     return await service.get_unified_timeline(customer_id, days=days)
 
 
 @router.get("/customers/{customer_id}/signals")
-async def get_customer_signals(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def get_customer_signals(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Get current detected churn signals for customer."""
     service = SignalService(db)
     return await service.get_customer_signals(customer_id)
 
 
 @router.get("/customers/{customer_id}/risk")
-async def get_customer_risk(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def get_customer_risk(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Get deterministic risk assessment for customer."""
-    service = CustomerService(db)
+    service = CustomerService(db, tenant_id=tenant_id)
     return await service.reassess_customer_risk(customer_id)
 
 
 @router.post("/customers/{customer_id}/reassess")
-async def reassess_customer(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def reassess_customer(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Trigger deterministic health score & risk re-assessment."""
-    service = CustomerService(db)
+    service = CustomerService(db, tenant_id=tenant_id)
     try:
         return await service.reassess_customer_risk(customer_id)
     except ValueError as e:
@@ -367,14 +432,16 @@ async def reassess_customer(customer_id: str, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/customers/{customer_id}/evidence")
-async def get_customer_evidence(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def get_customer_evidence(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Get supporting evidence records for customer."""
-    repo = EvidenceRepository(db)
+    repo = EvidenceRepository(db, tenant_id=tenant_id)
     return await repo.get_customer_evidences(customer_id)
 
 
 @router.post("/events")
-async def ingest_event(req: EventIngestRequest, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def ingest_event(req: EventIngestRequest, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Event Ingestion Endpoint: Ingests event, calculates signals, and triggers reassessment with idempotency (S20/S44)."""
     # Hardening: payload size guard (S44)
     if isinstance(req.payload, dict) and len(str(req.payload)) > 10000:
@@ -384,7 +451,14 @@ async def ingest_event(req: EventIngestRequest, db: AsyncSession = Depends(get_d
     valid_types = {"USAGE_EVENT","SUPPORT_TICKET","CUSTOMER_FEEDBACK","ACCOUNT_EVENT","INTERVENTION_COMPLETED","OUTCOME_AVAILABLE","USAGE_CHANGED","FEATURE_ADOPTION_CHANGED","SUPPORT_TICKET_CREATED","FEEDBACK_RECEIVED","SENTIMENT_CHANGED","ACCOUNT_ACTIVITY_CHANGED"}
     if req.event_type not in valid_types:
         raise HTTPException(status_code=422, detail=f"Invalid event_type {req.event_type}")
-    service = EventIngestionService(db)
+    # Tenant isolation: verify customer belongs to tenant
+    from sqlalchemy import select as _sel
+    from retainai.db.models import Customer as _Cust
+    res = await db.execute(_sel(_Cust.tenant_id).where(_Cust.id == req.customer_id))
+    row_tid = res.scalar_one_or_none()
+    if row_tid is not None and row_tid != tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant isolation violation for customer")
+    service = EventIngestionService(db, tenant_id=tenant_id)
     # Extract dedup_id if client provided
     dedup_id = req.payload.get("_dedup_id") if isinstance(req.payload, dict) else None
     try:
@@ -402,10 +476,11 @@ async def ingest_event(req: EventIngestRequest, db: AsyncSession = Depends(get_d
 
 
 @router.post("/customers/{customer_id}/investigate")
-async def investigate_alias_alternative(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def investigate_alias_alternative(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Alias for AGENT investigate — unified with agent_routes."""
     from retainai.agents.orchestrator import AgentOrchestrator
-    orch = AgentOrchestrator(db)
+    orch = AgentOrchestrator(db, tenant_id=tenant_id)
     try:
         return await orch.run_full_rescue_workflow(customer_id)
     except Exception as e:
@@ -413,7 +488,8 @@ async def investigate_alias_alternative(customer_id: str, db: AsyncSession = Dep
 
 
 @router.get("/customers/{customer_id}/recommendations")
-async def get_recommendations(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def get_recommendations(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Get recommendations (maps to interventions Proposed/Approved). Spec S34 alias."""
     service = InterventionService(db)
     inters = await service.get_customer_interventions(customer_id)
@@ -436,26 +512,28 @@ async def get_recommendations(customer_id: str, db: AsyncSession = Depends(get_d
 
 
 @router.get("/customers/{customer_id}/memory")
-async def get_customer_memory(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def get_customer_memory(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Retrieve relevant validated memories for customer segment (S24)."""
     from retainai.repositories.customer_repository import CustomerRepository
-    cust_repo = CustomerRepository(db)
+    cust_repo = CustomerRepository(db, tenant_id=tenant_id)
     cust = await cust_repo.get_by_id(customer_id)
     if not cust:
         raise HTTPException(status_code=404, detail="Customer not found")
-    mem_repo = MemoryRepository(db)
+    mem_repo = MemoryRepository(db, tenant_id=tenant_id)
     memories = await mem_repo.get_validated_memories(customer_segment=cust.segment)
     return memories
 
 
 @router.get("/learning")
-async def get_learning_overview(db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def get_learning_overview(db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Learning overview: candidates vs validated."""
     from sqlalchemy import select
     from retainai.db.models import LearningCandidate
     cand_res = await db.execute(select(LearningCandidate).order_by(LearningCandidate.created_at.desc()).limit(20))
     candidates = list(cand_res.scalars().all())
-    mem_repo = MemoryRepository(db)
+    mem_repo = MemoryRepository(db, tenant_id=tenant_id)
     validated = await mem_repo.get_validated_memories()
     return {
         "candidates": [
@@ -496,7 +574,8 @@ async def get_learning_overview(db: AsyncSession = Depends(get_db), user: dict =
 
 
 @router.get("/evidence/{evidence_id}")
-async def resolve_evidence(evidence_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def resolve_evidence(evidence_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Evidence resolver per S8: map evidence IDs back to real records."""
     # Check across tables: UsageEvent, SupportTicket, CustomerFeedback, AccountEvent, SystemEventLog, Evidence
     from retainai.db.models import UsageEvent, SupportTicket, CustomerFeedback, AccountEvent
@@ -527,7 +606,8 @@ async def resolve_evidence(evidence_id: str, db: AsyncSession = Depends(get_db),
 
 
 @router.get("/agent-runs/{run_id}")
-async def get_agent_run(run_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def get_agent_run(run_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Retrieve full agent run with state history and steps (S30)."""
     from retainai.db.models import AgentRun, AgentStep
     res = await db.execute(select(AgentRun).where(AgentRun.id == run_id))
@@ -561,7 +641,8 @@ async def get_agent_run(run_id: str, db: AsyncSession = Depends(get_db), user: d
 
 
 @router.get("/customers/{customer_id}/interventions", response_model=List[InterventionSchema])
-async def get_interventions(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def get_interventions(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Get interventions for customer."""
     service = InterventionService(db)
     interventions = await service.get_customer_interventions(customer_id)
@@ -587,7 +668,8 @@ async def get_interventions(customer_id: str, db: AsyncSession = Depends(get_db)
 
 
 @router.post("/interventions", response_model=InterventionSchema)
-async def create_intervention(req: InterventionCreateRequest, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def create_intervention(req: InterventionCreateRequest, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Create new intervention proposed plan — validates investigation_id FK (P0-04)."""
     # Validate investigation_id exists to avoid FK IntegrityError
     if req.investigation_id:
@@ -610,7 +692,8 @@ async def create_intervention(req: InterventionCreateRequest, db: AsyncSession =
 
 
 @router.post("/interventions/{intervention_id}/approve", response_model=InterventionSchema)
-async def approve_intervention(intervention_id: str, approved_by: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def approve_intervention(intervention_id: str, approved_by: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Approve an intervention plan (S15)."""
     if not intervention_id or len(intervention_id) > 80 or ";" in intervention_id:
         raise HTTPException(status_code=400, detail="Invalid intervention_id")
@@ -624,7 +707,8 @@ async def approve_intervention(intervention_id: str, approved_by: str = "CSM", d
 
 
 @router.post("/interventions/{intervention_id}/reject", response_model=InterventionSchema)
-async def reject_intervention(intervention_id: str, reason: str = "No reason", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def reject_intervention(intervention_id: str, reason: str = "No reason", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Reject intervention — captures human feedback as learning signal (S15/S48)."""
     service = InterventionService(db)
     inv = await service.reject_intervention(intervention_id, reason=reason, actor=actor)
@@ -634,7 +718,8 @@ async def reject_intervention(intervention_id: str, reason: str = "No reason", a
 
 
 @router.post("/interventions/{intervention_id}/modify", response_model=InterventionSchema)
-async def modify_intervention(intervention_id: str, modified_action: Dict[str, Any] = {}, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def modify_intervention(intervention_id: str, modified_action: Dict[str, Any] = {}, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Modify intervention — captures modified recommendation as preference (S48F)."""
     service = InterventionService(db)
     inv = await service.modify_intervention(intervention_id, modified_action=modified_action, reason=reason, actor=actor)
@@ -645,7 +730,8 @@ async def modify_intervention(intervention_id: str, modified_action: Dict[str, A
 
 # Alias endpoints per S34 spec
 @router.post("/recommendations/{recommendation_id}/approve")
-async def approve_recommendation_alias(recommendation_id: str, approved_by: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def approve_recommendation_alias(recommendation_id: str, approved_by: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     service = InterventionService(db)
     # Try direct id then recommendation_id
     inv = await service.approve_intervention(recommendation_id, approved_by=approved_by)
@@ -661,7 +747,8 @@ async def approve_recommendation_alias(recommendation_id: str, approved_by: str 
 
 
 @router.post("/recommendations/{recommendation_id}/reject")
-async def reject_recommendation_alias(recommendation_id: str, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def reject_recommendation_alias(recommendation_id: str, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     service = InterventionService(db)
     res = await db.execute(select(Intervention).where(Intervention.recommendation_id == recommendation_id))
     found = res.scalar_one_or_none()
@@ -673,7 +760,8 @@ async def reject_recommendation_alias(recommendation_id: str, reason: str = "", 
 
 
 @router.post("/recommendations/{recommendation_id}/modify")
-async def modify_recommendation_alias(recommendation_id: str, modified_action: Dict[str, Any] = {}, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def modify_recommendation_alias(recommendation_id: str, modified_action: Dict[str, Any] = {}, reason: str = "", actor: str = "CSM", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     service = InterventionService(db)
     res = await db.execute(select(Intervention).where(Intervention.recommendation_id == recommendation_id))
     found = res.scalar_one_or_none()
@@ -685,7 +773,8 @@ async def modify_recommendation_alias(recommendation_id: str, modified_action: D
 
 
 @router.post("/interventions/{intervention_id}/outcome", response_model=OutcomeSchema)
-async def record_outcome(intervention_id: str, req: OutcomeCreateRequest, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def record_outcome(intervention_id: str, req: OutcomeCreateRequest, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Record intervention outcome and trigger learning validation gate."""
     engine = LearningEngine(db)
     # Support both path param and body field; body field is now optional
@@ -702,9 +791,10 @@ async def record_outcome(intervention_id: str, req: OutcomeCreateRequest, db: As
 
 
 @router.get("/portfolio")
-async def get_portfolio_summary(db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def get_portfolio_summary(db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Portfolio Summary View."""
-    customer_repo = CustomerRepository(db)
+    customer_repo = CustomerRepository(db, tenant_id=tenant_id)
     customers = await customer_repo.list_all()
 
     arr_at_risk = sum(c.arr for c in customers if c.risk_level in ("CRITICAL", "HIGH_RISK", "AT_RISK"))
@@ -726,11 +816,12 @@ async def get_portfolio_summary(db: AsyncSession = Depends(get_db), user: dict =
 async def list_experience_memories(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant),
     limit: int = 50,
     offset: int = 0,
 ):
     limit = max(1, min(limit, 200))
-    repo = MemoryRepository(db)
+    repo = MemoryRepository(db, tenant_id=tenant_id)
     all_mems = await repo.list_all()
     return all_mems[offset : offset + limit]
 
@@ -739,11 +830,12 @@ async def list_experience_memories(
 async def list_experience_memories_alias(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant),
     limit: int = 50,
     offset: int = 0,
 ):
     limit = max(1, min(limit, 200))
-    repo = MemoryRepository(db)
+    repo = MemoryRepository(db, tenant_id=tenant_id)
     all_mems = await repo.list_all()
     return all_mems[offset : offset + limit]
 
@@ -752,6 +844,7 @@ async def list_experience_memories_alias(
 async def list_all_interventions(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant),
     limit: int = 50,
     offset: int = 0,
     status: Optional[str] = None,
@@ -793,6 +886,7 @@ async def list_all_interventions(
 async def list_all_outcomes(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant),
     limit: int = 50,
     offset: int = 0,
 ):
@@ -803,9 +897,10 @@ async def list_all_outcomes(
 
 
 @router.get("/metrics/observability")
-async def get_observability_metrics(db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
-    """Observability metrics per S44."""
-    from sqlalchemy import select
+async def get_observability_metrics(db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
+    """Observability metrics per S44 — Phase 5 adds by_tenant breakdown (tenant observability)."""
+    from sqlalchemy import select, func
     from retainai.db.models import AgentRun, AgentStep
     # Agent latency approximations via run durations
     runs_res = await db.execute(select(AgentRun))
@@ -839,21 +934,76 @@ async def get_observability_metrics(db: AsyncSession = Depends(get_db), user: di
     outcomes = list(out_res.scalars().all())
     success_outcomes = sum(1 for o in outcomes if str(getattr(o.status, "value", o.status)) in ("SUCCESS", "POSITIVE"))
     # Learning candidates count
-    from retainai.db.models import LearningCandidate
+    from retainai.db.models import LearningCandidate, ExperienceMemory, SystemEventLog, UsageEvent
     cand_res = await db.execute(select(LearningCandidate))
     candidates = list(cand_res.scalars().all())
+    # ── Phase 5: by_tenant breakdown (tenant observability) ──
+    # Group counts per tenant_id for runs/outcomes/candidates/memories/events
+    from collections import defaultdict
+    tenant_ids = set()
+    for r in runs:
+        tenant_ids.add(getattr(r, "tenant_id", None) or "unknown")
+    for o in outcomes:
+        tenant_ids.add(getattr(o, "tenant_id", None) or "unknown")
+    for c in candidates:
+        tenant_ids.add(getattr(c, "tenant_id", None) or "unknown")
+    try:
+        steps_tenant_ids = set(getattr(s, "tenant_id", None) or "unknown" for s in steps)
+        tenant_ids.update(steps_tenant_ids)
+    except Exception:
+        pass
+    # Also include current tenant even if zero
+    tenant_ids.add(tenant_id)
+    tenant_ids.discard(None)
+    by_tenant = {}
+    for tid in sorted(tenant_ids):
+        tid_key = tid or "unknown"
+        runs_t = [r for r in runs if (getattr(r, "tenant_id", None) or "unknown") == tid_key]
+        total_t = len(runs_t)
+        completed_t = sum(1 for r in runs_t if str(getattr(r.status, "value", r.status)) == "COMPLETED")
+        outcomes_t = [o for o in outcomes if (getattr(o, "tenant_id", None) or "unknown") == tid_key]
+        candidates_t = [c for c in candidates if (getattr(c, "tenant_id", None) or "unknown") == tid_key]
+        steps_t = [s for s in steps if (getattr(s, "tenant_id", None) or "unknown") == tid_key] if steps else []
+        # Memories per tenant (tenant-isolated)
+        try:
+            mem_res = await db.execute(select(ExperienceMemory).where(ExperienceMemory.tenant_id == tid_key))
+            mems_t = list(mem_res.scalars().all())
+        except Exception:
+            mems_t = []
+        # Events ingested per tenant (SystemEventLog + UsageEvent count)
+        try:
+            evt_res = await db.execute(select(func.count()).select_from(SystemEventLog).where(SystemEventLog.tenant_id == tid_key))
+            evt_cnt = evt_res.scalar() or 0
+        except Exception:
+            evt_cnt = 0
+        try:
+            ue_res = await db.execute(select(func.count()).select_from(UsageEvent).where(UsageEvent.tenant_id == tid_key))
+            ue_cnt = ue_res.scalar() or 0
+        except Exception:
+            ue_cnt = 0
+        by_tenant[tid_key] = {
+            "agent_runs": {"total": total_t, "completed": completed_t, "failed": total_t - completed_t},
+            "tool_calls": {"total": len(steps_t) if steps_t else sum(len(r.tool_calls or []) for r in runs_t)},
+            "outcomes": {"total": len(outcomes_t)},
+            "learning": {"candidates": len(candidates_t), "memories": len(mems_t)},
+            "events_ingested": evt_cnt + ue_cnt,
+        }
+    validated_memories_current = len([m for m in (await MemoryRepository(db, tenant_id=tenant_id).list_all()) if str(getattr(m.validation_status, "value", m.validation_status)) == "VALIDATED"])
     return {
         "request_id": f"req_{uuid.uuid4().hex[:8]}",
         "agent_runs": {"total": total_runs, "completed": completed, "failed": failed, "completion_rate": round(completed/max(1,total_runs),2)},
         "tool_calls": {"total": total_tool_calls, "success_rate": tool_success_rate},
         "outcomes": {"total": len(outcomes), "success": success_outcomes, "success_rate": round(success_outcomes/max(1,len(outcomes)),2)},
-        "learning": {"candidates": len(candidates), "validated_memories": len([m for m in (await MemoryRepository(db).list_all()) if str(getattr(m.validation_status, "value", m.validation_status)) == "VALIDATED"])},
+        "learning": {"candidates": len(candidates), "validated_memories": validated_memories_current},
+        "by_tenant": by_tenant,
+        "current_tenant": tenant_id,
         "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
     }
 
 
 @router.get("/config/prompts")
-async def get_dynamic_prompts(user: dict = Depends(get_current_user)):
+async def get_dynamic_prompts(user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Dynamic System Prompt inspection (S: dynamic prompt)."""
     from retainai.agents.investigation_agent import DEFAULT_SYSTEM_PROMPT as INV_DEF
     from retainai.agents.action_agent import DEFAULT_SYSTEM_PROMPT as ACT_DEF
@@ -878,7 +1028,8 @@ async def get_dynamic_prompts(user: dict = Depends(get_current_user)):
 
 
 @router.put("/config/prompts")
-async def update_dynamic_prompts(payload: Dict[str, Any], user: dict = Depends(get_current_user)):
+async def update_dynamic_prompts(payload: Dict[str, Any], user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Update dynamic system prompts at runtime (no restart required)."""
     from retainai.config import settings
     if "investigation" in payload:
@@ -901,8 +1052,145 @@ async def update_dynamic_prompts(payload: Dict[str, Any], user: dict = Depends(g
     return await get_dynamic_prompts()
 
 
+
+@router.get("/org/settings")
+async def get_org_settings(db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user), tenant_id: str = Depends(require_tenant)):
+    """Get org settings per-tenant (health_weights, risk_thresholds, llm config)."""
+    from retainai.db.models import OrgSettings
+    from sqlalchemy import select
+    res = await db.execute(select(OrgSettings).where(OrgSettings.tenant_id == tenant_id))
+    org = res.scalar_one_or_none()
+    if not org:
+        org = OrgSettings(tenant_id=tenant_id)
+        db.add(org)
+        await db.commit()
+        await db.refresh(org)
+    return {
+        "tenant_id": org.tenant_id,
+        "health_weights": org.health_weights,
+        "risk_thresholds": org.risk_thresholds,
+        "llm_provider": org.llm_provider,
+        "llm_model": org.llm_model,
+        "has_llm_key": bool(org.llm_api_key_encrypted),
+        "investigation_prompt": org.investigation_prompt,
+        "action_prompt": org.action_prompt,
+        "updated_at": org.updated_at.isoformat() if org.updated_at else None,
+    }
+
+@router.put("/org/settings")
+async def update_org_settings(payload: dict, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user), tenant_id: str = Depends(require_tenant)):
+    """Update org settings (ADMIN only). Never returns raw key."""
+    if str(user.get("role","")).upper() not in ("ADMIN",):
+        raise HTTPException(status_code=403, detail="ADMIN role required")
+    from retainai.db.models import OrgSettings
+    from sqlalchemy import select
+    res = await db.execute(select(OrgSettings).where(OrgSettings.tenant_id == tenant_id))
+    org = res.scalar_one_or_none()
+    if not org:
+        org = OrgSettings(tenant_id=tenant_id)
+        db.add(org)
+        await db.flush()
+    if "health_weights" in payload:
+        hw = payload["health_weights"]
+        if isinstance(hw, dict):
+            org.health_weights = hw
+    if "risk_thresholds" in payload:
+        org.risk_thresholds = payload["risk_thresholds"]
+    if "llm_provider" in payload:
+        org.llm_provider = str(payload["llm_provider"])[:50]
+    if "llm_model" in payload:
+        org.llm_model = str(payload["llm_model"])[:100]
+    if "llm_api_key" in payload and payload["llm_api_key"]:
+        from retainai.auth.auth import encrypt_api_key
+        org.llm_api_key_encrypted = encrypt_api_key(str(payload["llm_api_key"]))
+    if "investigation_prompt" in payload:
+        val = payload["investigation_prompt"]
+        if isinstance(val, str) and len(val) > 10000:
+            raise HTTPException(status_code=413, detail="Prompt too large")
+        org.investigation_prompt = val
+    if "action_prompt" in payload:
+        val = payload["action_prompt"]
+        if isinstance(val, str) and len(val) > 10000:
+            raise HTTPException(status_code=413, detail="Prompt too large")
+        org.action_prompt = val
+    await db.commit()
+    await db.refresh(org)
+    return {
+        "tenant_id": org.tenant_id,
+        "health_weights": org.health_weights,
+        "risk_thresholds": org.risk_thresholds,
+        "llm_provider": org.llm_provider,
+        "llm_model": org.llm_model,
+        "has_llm_key": bool(org.llm_api_key_encrypted),
+        "investigation_prompt": org.investigation_prompt,
+        "action_prompt": org.action_prompt,
+        "updated_at": org.updated_at.isoformat() if org.updated_at else None,
+    }
+
+
+@router.get("/org/usage")
+async def get_org_usage(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant),
+):
+    """Tenant observability: per-tenant usage counts (events_ingested, agent_runs, memories). Phase 5."""
+    from sqlalchemy import select, func
+    from retainai.db.models import (
+        UsageEvent,
+        SupportTicket,
+        CustomerFeedback,
+        AccountEvent,
+        AgentRun,
+        ExperienceMemory,
+        SystemEventLog,
+        Customer,
+        InterventionOutcome,
+        Intervention,
+    )
+    # Helper to count where tenant_id == current
+    async def _count(model):
+        try:
+            res = await db.execute(select(func.count()).select_from(model).where(model.tenant_id == tenant_id))
+            return res.scalar() or 0
+        except Exception:
+            return 0
+    events_ingested = 0
+    for _m in (UsageEvent, SupportTicket, CustomerFeedback, AccountEvent, SystemEventLog):
+        events_ingested += await _count(_m)
+    agent_runs = await _count(AgentRun)
+    # Memories: ExperienceMemory + LearningCandidate for richness
+    memories = await _count(ExperienceMemory)
+    try:
+        cust_res = await db.execute(select(func.count()).select_from(Customer).where(Customer.tenant_id == tenant_id))
+        customers = cust_res.scalar() or 0
+    except Exception:
+        customers = 0
+    try:
+        int_res = await db.execute(select(func.count()).select_from(Intervention).where(Intervention.tenant_id == tenant_id))
+        interventions = int_res.scalar() or 0
+    except Exception:
+        interventions = 0
+    try:
+        out_res = await db.execute(select(func.count()).select_from(InterventionOutcome).where(InterventionOutcome.tenant_id == tenant_id))
+        outcomes = out_res.scalar() or 0
+    except Exception:
+        outcomes = 0
+    logger.info(f"org_usage tenant_id={tenant_id} events={events_ingested} runs={agent_runs} memories={memories}")
+    return {
+        "tenant_id": tenant_id,
+        "events_ingested": events_ingested,
+        "agent_runs": agent_runs,
+        "memories": memories,
+        "customers": customers,
+        "interventions": interventions,
+        "outcomes": outcomes,
+        "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+    }
+
 @router.post("/replay/{run_id}")
-async def replay_agent_run(run_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+async def replay_agent_run(run_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant)):
     """Deterministic replay per S31: recorded tool/retrieval replay mode."""
     from retainai.db.models import AgentRun
     res = await db.execute(select(AgentRun).where(AgentRun.id == run_id))

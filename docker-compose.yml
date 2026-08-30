@@ -1,3 +1,9 @@
+# RETAINAI — docker-compose prod-like defaults (Phase 5 Infra Hardening)
+# Prod-like: AUTH_ENABLED=true, DEMO_MODE=false, DATABASE_URL=postgresql+asyncpg
+# For local demo/hackathon reliability, override via .env or docker-compose.override.yml:
+#   AUTH_ENABLED=false
+#   DEMO_MODE=true
+#   DATABASE_URL=sqlite+aiosqlite:///./retainai.db   # dev fallback only, not for multi-tenant prod
 version: '3.8'
 
 services:
@@ -9,10 +15,21 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
+      # --- Database: prod-like Postgres async driver (required for concurrent multi-tenant writes) ---
+      # Override to sqlite only for local dev without Postgres: sqlite+aiosqlite:///./retainai.db
       - DATABASE_URL=postgresql+asyncpg://retainai:retainai@db:5432/retainaidb
-      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
-      - LLM_MODEL=${LLM_MODEL:-gemini-2.5-flash}
-      - LLM_API_KEY=${LLM_API_KEY}
+      # --- Auth hardening: prod-like enforces JWT, disables demo bypass ---
+      # AUTH_ENABLED=true enforces Bearer JWT (HS256) via JWT_SECRET; DEMO_MODE=false disables DEMO_BYPASS in auth/auth.py:187
+      # For demo/hackathon: set AUTH_ENABLED=false DEMO_MODE=true (see override comment at top)
+      - AUTH_ENABLED=true
+      - DEMO_MODE=false
+      # --- LLM proxy (BYOK per tenant overrides global; see /org/settings) ---
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - LLM_MODEL=${LLM_MODEL:-openai/gpt-oss-120b}
+      - LLM_API_KEY=${LLM_API_KEY:-mock_key_for_dev}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-retainai-dev-secret-change-in-prod}
+      - APP_SECRET_KEY=${APP_SECRET_KEY:-retainai-dev-app-secret-change-in-prod-32chars}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -20,6 +37,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # readiness probe also available at /readiness (DB SELECT 1) — see main.py:238
 
   frontend:
     build:

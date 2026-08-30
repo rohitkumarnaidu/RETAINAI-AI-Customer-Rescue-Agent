@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM Models for RETAINAI Customer 360, Health Engine & Agent Memory."""
+"""SQLAlchemy ORM Models for RETAINAI Customer 360, Health Engine & Agent Memory — Tenant-Isolated Phase 1."""
 
 from datetime import datetime, date, timezone
 from enum import Enum
@@ -72,10 +72,75 @@ class AgentRunStatus(str, Enum):
     FALLBACK = "FALLBACK"
 
 
+class UserRole(str, Enum):
+    ADMIN = "ADMIN"
+    MEMBER = "MEMBER"
+    VIEWER = "VIEWER"
+
+
+# ── Tenant Isolation Core (Phase 1) ────────────────────────────────────────────
+
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    users: Mapped[List["User"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    customers: Mapped[List["Customer"]] = relationship(back_populates="tenant")
+
+    __table_args__ = (
+        {"extend_existing": True},
+    )
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[UserRole] = mapped_column(SQLEnum(UserRole), nullable=False, default=UserRole.MEMBER)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    tenant: Mapped["Tenant"] = relationship(back_populates="users")
+
+    __table_args__ = (
+        Index("idx_users_tenant", "tenant_id"),
+        Index("idx_users_email", "email"),
+        {"extend_existing": True},
+    )
+
+
+class OrgSettings(Base):
+    __tablename__ = "org_settings"
+
+    tenant_id: Mapped[str] = mapped_column(String(50), ForeignKey("tenants.id"), primary_key=True)
+    health_weights: Mapped[Dict[str, Any]] = mapped_column(JSON, default=lambda: {"usage": 0.4, "support": 0.3, "sentiment": 0.2, "engagement": 0.1})
+    risk_thresholds: Mapped[Dict[str, Any]] = mapped_column(JSON, default=lambda: {"critical": 20, "high": 40, "at_risk": 60, "watch": 80, "healthy": 90})
+    llm_provider: Mapped[str] = mapped_column(String(50), nullable=False, default="groq")
+    llm_model: Mapped[str] = mapped_column(String(100), nullable=False, default="openai/gpt-oss-120b")
+    llm_api_key_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    investigation_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    action_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    tenant: Mapped["Tenant"] = relationship("Tenant")
+
+    __table_args__ = (
+        {"extend_existing": True},
+    )
+
+
 class Customer(Base):
     __tablename__ = "customers"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     external_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     domain: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -96,6 +161,7 @@ class Customer(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
+    tenant: Mapped[Optional["Tenant"]] = relationship(back_populates="customers")
     usage_events: Mapped[List["UsageEvent"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
     feature_adoptions: Mapped[List["FeatureAdoption"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
     support_tickets: Mapped[List["SupportTicket"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
@@ -108,6 +174,7 @@ class Customer(Base):
     agent_runs: Mapped[List["AgentRun"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
 
     __table_args__ = (
+        Index("idx_customers_tenant", "tenant_id"),
         Index("idx_customers_risk", "risk_level"),
         Index("idx_customers_health", "health_score"),
         Index("idx_customers_status", "status"),
@@ -119,6 +186,7 @@ class UsageEvent(Base):
     __tablename__ = "usage_events"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     daily_active_users: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -138,6 +206,7 @@ class UsageEvent(Base):
     customer: Mapped["Customer"] = relationship(back_populates="usage_events")
 
     __table_args__ = (
+        Index("idx_usage_tenant", "tenant_id"),
         Index("idx_usage_customer_time", "customer_id", "timestamp"),
         {"extend_existing": True},
     )
@@ -147,6 +216,7 @@ class FeatureAdoption(Base):
     __tablename__ = "feature_adoptions"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     feature_name: Mapped[str] = mapped_column(String(100), nullable=False)
     period_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -158,6 +228,7 @@ class FeatureAdoption(Base):
     customer: Mapped["Customer"] = relationship(back_populates="feature_adoptions")
 
     __table_args__ = (
+        Index("idx_feature_tenant", "tenant_id"),
         Index("idx_feature_customer_time", "customer_id", "period_start"),
         {"extend_existing": True},
     )
@@ -167,6 +238,7 @@ class SupportTicket(Base):
     __tablename__ = "support_tickets"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     external_ticket_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -181,6 +253,7 @@ class SupportTicket(Base):
     customer: Mapped["Customer"] = relationship(back_populates="support_tickets")
 
     __table_args__ = (
+        Index("idx_tickets_tenant", "tenant_id"),
         Index("idx_tickets_customer_status", "customer_id", "status"),
         Index("idx_tickets_customer_time", "customer_id", "created_at"),
         {"extend_existing": True},
@@ -191,6 +264,7 @@ class CustomerFeedback(Base):
     __tablename__ = "customer_feedbacks"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     source: Mapped[str] = mapped_column(String(50), nullable=False, default="CSAT_SURVEY")
@@ -204,6 +278,7 @@ class CustomerFeedback(Base):
     customer: Mapped["Customer"] = relationship(back_populates="feedback_entries")
 
     __table_args__ = (
+        Index("idx_feedback_tenant", "tenant_id"),
         Index("idx_feedback_customer_time", "customer_id", "created_at"),
         {"extend_existing": True},
     )
@@ -213,6 +288,7 @@ class AccountEvent(Base):
     __tablename__ = "account_events"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)  # ADMIN_LOGIN, CSM_MEETING, CONTRACT_CHANGE
@@ -222,6 +298,7 @@ class AccountEvent(Base):
     customer: Mapped["Customer"] = relationship(back_populates="account_events")
 
     __table_args__ = (
+        Index("idx_account_evt_tenant", "tenant_id"),
         Index("idx_account_evt_customer_time", "customer_id", "timestamp"),
         {"extend_existing": True},
     )
@@ -236,6 +313,7 @@ class RiskAssessment(Base):
     __tablename__ = "risk_assessments"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     health_score: Mapped[float] = mapped_column(Float, nullable=False)
@@ -252,6 +330,7 @@ class RiskAssessment(Base):
     investigation_reports: Mapped[List["InvestigationReport"]] = relationship(back_populates="risk_assessment")
 
     __table_args__ = (
+        Index("idx_risk_tenant", "tenant_id"),
         Index("idx_risk_customer_time", "customer_id", "created_at"),
         {"extend_existing": True},
     )
@@ -261,6 +340,7 @@ class Evidence(Base):
     __tablename__ = "evidences"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     source_type: Mapped[str] = mapped_column(String(50), nullable=False)  # USAGE_EVENT, SUPPORT_TICKET, FEEDBACK, ACCOUNT_EVENT
     source_id: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -272,6 +352,7 @@ class Evidence(Base):
     customer: Mapped["Customer"] = relationship(back_populates="evidences")
 
     __table_args__ = (
+        Index("idx_evidence_tenant", "tenant_id"),
         Index("idx_evidence_customer", "customer_id"),
         Index("idx_evidence_source", "source_type", "source_id"),
         {"extend_existing": True},
@@ -282,6 +363,7 @@ class InvestigationReport(Base):
     __tablename__ = "investigation_reports"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     risk_assessment_id: Mapped[str] = mapped_column(ForeignKey("risk_assessments.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -298,6 +380,7 @@ class InvestigationReport(Base):
     interventions: Mapped[List["Intervention"]] = relationship(back_populates="investigation")
 
     __table_args__ = (
+        Index("idx_investigation_tenant", "tenant_id"),
         Index("idx_investigation_customer", "customer_id"),
         Index("idx_investigation_risk", "risk_assessment_id"),
         {"extend_existing": True},
@@ -308,6 +391,7 @@ class Intervention(Base):
     __tablename__ = "interventions"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     investigation_id: Mapped[str] = mapped_column(ForeignKey("investigation_reports.id"), nullable=False)
     recommendation_id: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
@@ -333,6 +417,7 @@ class Intervention(Base):
     outcome: Mapped[Optional["InterventionOutcome"]] = relationship(back_populates="intervention", uselist=False)
 
     __table_args__ = (
+        Index("idx_interventions_tenant", "tenant_id"),
         Index("idx_interventions_customer", "customer_id"),
         Index("idx_interventions_status", "status"),
         {"extend_existing": True},
@@ -343,6 +428,7 @@ class InterventionOutcome(Base):
     __tablename__ = "intervention_outcomes"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     intervention_id: Mapped[str] = mapped_column(ForeignKey("interventions.id"), nullable=False)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -368,6 +454,7 @@ class InterventionOutcome(Base):
     intervention: Mapped["Intervention"] = relationship(back_populates="outcome")
 
     __table_args__ = (
+        Index("idx_outcome_tenant", "tenant_id"),
         Index("idx_outcome_intervention", "intervention_id", unique=True),
         Index("idx_outcome_customer", "customer_id"),
         {"extend_existing": True},
@@ -378,6 +465,7 @@ class ExperienceMemory(Base):
     __tablename__ = "experience_memories"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     last_observed: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -403,6 +491,7 @@ class ExperienceMemory(Base):
     version: Mapped[str] = mapped_column(String(20), default="v1.0")
 
     __table_args__ = (
+        Index("idx_memory_tenant", "tenant_id"),
         Index("idx_memory_segment", "customer_segment"),
         Index("idx_memory_validation", "validation_status"),
         {"extend_existing": True},
@@ -439,6 +528,7 @@ class AgentStep(Base):
     __tablename__ = "agent_steps"
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     run_id: Mapped[str] = mapped_column(ForeignKey("agent_runs.id"), nullable=False)
     step_type: Mapped[str] = mapped_column(String(50), nullable=False)
     state: Mapped[str] = mapped_column(String(50), nullable=False, default=AgentState.RECEIVED.value)
@@ -451,6 +541,7 @@ class AgentStep(Base):
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
+        Index("idx_agent_steps_tenant", "tenant_id"),
         Index("idx_agent_steps_run", "run_id"),
         {"extend_existing": True},
     )
@@ -460,6 +551,7 @@ class LearningCandidate(Base):
     __tablename__ = "learning_candidates"
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(String(50), nullable=False)
     intervention_id: Mapped[str] = mapped_column(String(50), nullable=False)
     pattern: Mapped[str] = mapped_column(Text, nullable=False)
@@ -476,6 +568,7 @@ class LearningCandidate(Base):
     validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     __table_args__ = (
+        Index("idx_candidates_tenant", "tenant_id"),
         Index("idx_candidates_customer", "customer_id"),
         Index("idx_candidates_status", "status"),
         {"extend_existing": True},
@@ -486,6 +579,7 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -507,6 +601,7 @@ class AgentRun(Base):
     customer: Mapped["Customer"] = relationship(back_populates="agent_runs")
 
     __table_args__ = (
+        Index("idx_agent_runs_tenant", "tenant_id"),
         Index("idx_agent_runs_customer", "customer_id"),
         Index("idx_agent_runs_status", "status"),
         {"extend_existing": True},
@@ -517,6 +612,7 @@ class SystemEventLog(Base):
     __tablename__ = "system_event_logs"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     customer_id: Mapped[str] = mapped_column(String(50), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -524,6 +620,7 @@ class SystemEventLog(Base):
     details: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
 
     __table_args__ = (
+        Index("idx_syslog_tenant", "tenant_id"),
         Index("idx_syslog_customer_time", "customer_id", "timestamp"),
         Index("idx_syslog_type", "event_type"),
         {"extend_existing": True},
