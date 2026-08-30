@@ -13,9 +13,11 @@ import { DataHubView } from './components/DataHubView';
 import { LoginPage } from './pages/Login';
 import { useAuth } from './context/AuthContext';
 import { resetDemo, getCustomers } from './services/api';
-import { LayoutDashboard, Users, UserCircle2, SearchCode, ClipboardList, GraduationCap, ScrollText, Shield, RefreshCw, Menu, X, Upload, Settings, LogOut, LogIn, BarChart3, Database } from 'lucide-react';
+import { ChatWidget } from './components/ChatWidget';
+import { LayoutDashboard, Users, UserCircle2, SearchCode, ClipboardList, GraduationCap, ScrollText, Shield, RefreshCw, Menu, X, Upload, Settings, LogOut, LogIn, BarChart3, Database, MessageCircle } from 'lucide-react';
+import { ChatView } from './components/ChatView';
 
-type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit'|'onboarding'|'settings'|'analytics'|'datahub';
+type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit'|'onboarding'|'settings'|'analytics'|'datahub'|'chat';
 
 export function App() {
   const { user, tenantId, logout, isAuthenticated } = useAuth();
@@ -102,6 +104,7 @@ export function App() {
     {title:'DATA', items:[{id:'datahub', label:'Data Hub', icon:Database}]},
     {title:'ANALYTICS', items:[{id:'analytics', label:'Analytics', icon:BarChart3}]},
     {title:'INTELLIGENCE', items:[
+      {id:'chat', label:'Chat (5 Agents)', icon:MessageCircle},
       {id:'investigations', label:'Investigations', icon:SearchCode},
       {id:'interventions', label:'Interventions', icon:ClipboardList},
       {id:'learning', label:'Learning', icon:GraduationCap},
@@ -261,6 +264,7 @@ export function App() {
           {activeTab==='learning' && <LearningView />}
           {activeTab==='analytics' && <AnalyticsView />}
           {activeTab==='datahub' && <DataHubView onSelectCustomer={handleSelectCustomer} />}
+          {activeTab==='chat' && <ChatView onSelectCustomer={handleSelectCustomer} />}
           {activeTab==='onboarding' && <Onboarding onComplete={()=> setActiveTab('command')} />}
           {activeTab==='settings' && <SettingsView />}
           {activeTab==='audit' && <AuditView />}
@@ -282,6 +286,8 @@ export function App() {
           </div>
         </div>
       )}
+      {/* Global parallel chat — customer-aware when on 360 */}
+      <ChatWidget customerId={selectedCustomerId || undefined} customerName={undefined} />
     </div>
   );
 }

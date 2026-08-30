@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Upload, FileSpreadsheet, Braces, Webhook, Database, ArrowRight, CheckCircle2, Sparkles, Users, Zap, Copy, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Upload, FileSpreadsheet, Braces, Webhook, Database, ArrowRight, CheckCircle2, Sparkles, Users, Zap, Copy, ExternalLink, Activity, MessageSquare, LifeBuoy } from 'lucide-react';
 import { CsvUpload } from './CsvUpload';
+import { TelemetryUpload } from './TelemetryUpload';
 import { Card, SectionHeader } from './ui';
-import { ingestBatch, seedSample, getWebhookUrl } from '../services/api';
+import { ingestBatch, seedSample, getWebhookUrl, getSampleStats, getPortfolio, getCustomers } from '../services/api';
 
 type Step = 1 | 2 | 3 | 4;
 type BringTab = 'csv' | 'json' | 'webhook' | 'sample';
@@ -18,6 +19,34 @@ export const Onboarding: React.FC<{ onComplete?: () => void }> = ({ onComplete }
   const [seedResult, setSeedResult] = useState<string | null>(null);
   const [seedError, setSeedError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [sampleStats, setSampleStats] = useState<{customers:number;usage:number;tickets:number;feedbacks:number;total:number}|null>(null);
+  const [liveCounts, setLiveCounts] = useState<{customers:number;usage:number;support:number;feedback:number}|null>(null);
+
+  useEffect(()=>{
+    let cancelled=false;
+    (async()=>{
+      try{
+        const s = await getSampleStats().catch(()=> null);
+        if(!cancelled && s) setSampleStats(s);
+        // live tenant counts for comparison
+        const [pf, cs] = await Promise.all([getPortfolio().catch(()=>null), getCustomers().catch(()=>[])]);
+        if(cancelled) return;
+        const totalCustomers = (pf as any)?.metrics?.total_customers ?? (cs as any[])?.length ?? 0;
+        // estimate usage/support/feedback from Data Hub logic: fetch timelines for sample
+        let usage=0, support=0, feedback=0;
+        try{
+          const slice = (cs as any[]).slice(0, 8);
+          const tls = await Promise.all(slice.map((c:any)=> import('../services/api').then(m=> m.getCustomerTimeline(c.id, 30).catch(()=>[]))));
+          const flat = (tls as any).flat();
+          usage = flat.filter((e:any)=> (e.source||'').toUpperCase().includes('USAGE')).length;
+          support = flat.filter((e:any)=> (e.source||'').toUpperCase().includes('SUPPORT') || (e.source||'').toUpperCase().includes('TICKET')).length;
+          feedback = flat.filter((e:any)=> (e.source||'').toUpperCase().includes('FEEDBACK') || (e.source||'').toUpperCase().includes('CSAT')).length;
+        } catch{}
+        setLiveCounts({customers: totalCustomers, usage, support, feedback});
+      } catch{}
+    })();
+    return ()=>{ cancelled=true; };
+  }, [bringTab]);
 
   const handleJsonBatch = async () => {
     setJsonLoading(true); setJsonError(null); setJsonResult(null);
@@ -169,13 +198,42 @@ export const Onboarding: React.FC<{ onComplete?: () => void }> = ({ onComplete }
 
           {bringTab === 'sample' && (
             <Card>
-              <SectionHeader title="Sample dataset — 101 benchmark accounts" subtitle="Idempotent per tenant. Demonstrates heroic → critical archetypes." icon={Database} />
+              <SectionHeader title="Sample dataset — 4 live DB datasets · dynamic counts" subtitle="Idempotent per tenant. Demonstrates heroic → critical archetypes. 1 click seeds all 4 — counts are live from dataset file & your tenant." icon={Database} />
               <div className="space-y-3">
-                <div className="text-sm text-slate-600">Loads <code className="bg-slate-100 px-1 rounded">retainai_dataset_v2.json</code> into your tenant only (skips duplicates).</div>
-                <button onClick={handleSeed} disabled={seedLoading} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50">{seedLoading ? 'Seeding…' : 'Seed sample 101'} <Database className="w-3.5 h-3.5" /></button>
+                <div className="text-sm text-slate-600">Loads <code className="bg-slate-100 px-1 rounded">retainai_dataset_v2.json</code> into your tenant only (skips duplicates) — creates <b>4 folders</b> in <b>Data Hub</b>. <span className="text-xs font-mono text-slate-500">{sampleStats ? `Dataset: ${sampleStats.customers} customers · ${sampleStats.usage} usage · ${sampleStats.tickets} tickets · ${sampleStats.feedbacks} feedbacks` : 'Loading dataset stats…'}</span></div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="border border-emerald-200 bg-emerald-50 rounded-xl p-3 text-center">
+                    <Users className="w-5 h-5 mx-auto text-emerald-600" />
+                    <div className="text-xs font-bold mt-1">Customers</div>
+                    <div className="text-lg font-bold">{sampleStats ? sampleStats.customers : '—'}</div>
+                    <div className="text-[11px] text-slate-500 font-mono">13 cols · DB{liveCounts ? ` · you: ${liveCounts.customers}` : ''}</div>
+                  </div>
+                  <div className="border border-blue-200 bg-blue-50 rounded-xl p-3 text-center">
+                    <Activity className="w-5 h-5 mx-auto text-blue-600" />
+                    <div className="text-xs font-bold mt-1">Usage</div>
+                    <div className="text-lg font-bold">{sampleStats ? sampleStats.usage : '—'}</div>
+                    <div className="text-[11px] text-slate-500 font-mono">events{liveCounts ? ` · you: ${liveCounts.usage}` : ''}</div>
+                  </div>
+                  <div className="border border-orange-200 bg-orange-50 rounded-xl p-3 text-center">
+                    <LifeBuoy className="w-5 h-5 mx-auto text-orange-600" />
+                    <div className="text-xs font-bold mt-1">Support</div>
+                    <div className="text-lg font-bold">{sampleStats ? sampleStats.tickets : '—'}</div>
+                    <div className="text-[11px] text-slate-500 font-mono">tickets{liveCounts ? ` · you: ${liveCounts.support}` : ''}</div>
+                  </div>
+                  <div className="border border-purple-200 bg-purple-50 rounded-xl p-3 text-center">
+                    <MessageSquare className="w-5 h-5 mx-auto text-purple-600" />
+                    <div className="text-xs font-bold mt-1">Feedback</div>
+                    <div className="text-lg font-bold">{sampleStats ? sampleStats.feedbacks : '—'}</div>
+                    <div className="text-[11px] text-slate-500 font-mono">entries{liveCounts ? ` · you: ${liveCounts.feedback}` : ''}</div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button onClick={handleSeed} disabled={seedLoading} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50">{seedLoading ? 'Seeding…' : sampleStats ? `Seed all 4 — ${sampleStats.customers} accounts + ${sampleStats.total - sampleStats.customers} telemetry` : 'Seed all 4'} <Database className="w-3.5 h-3.5" /></button>
+                  <span className="text-xs text-slate-500">→ creates 4 Data Hub folders instantly{sampleStats ? ` · total ${sampleStats.total} rows` : ''}</span>
+                </div>
                 {seedResult && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-2 rounded-lg">{seedResult}</div>}
                 {seedError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded-lg">{seedError}</div>}
-                <div className="text-xs text-slate-500">Already have customers? Sample appends, never drops.</div>
+                <div className="text-xs text-slate-500">Already have customers? Sample appends, never drops — adds 4th folder if needed. See <b>Data Hub → 4 folders</b>.</div>
               </div>
             </Card>
           )}
@@ -189,31 +247,34 @@ export const Onboarding: React.FC<{ onComplete?: () => void }> = ({ onComplete }
 
       {/* Step 3 */}
       {step === 3 && (
-        <Card>
-          <SectionHeader title="Step 3 — Telemetry (optional)" subtitle="Bulk events or go straight to investigation. Every event triggers reassessment." icon={Zap} />
-          <div className="space-y-3 text-sm">
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <div className="font-semibold text-amber-900">You can skip this — investigate with just customers.</div>
-              <div className="text-amber-800 mt-1">For richest signal, bulk-upload historical telemetry: <code className="bg-white px-1 rounded">POST /customers/{"{id}"}/events/bulk {"{"}events: [{"{"}event_type, payload, timestamp{"}"}]{"}"}</code> (max 200/events). Or use Customer 360 → Inject Live Data after.</div>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">USAGE_EVENT</div><div className="text-slate-500 mt-1 font-mono">{"{"}daily_active_users, license_utilization{"}"}</div></div>
-              <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">SUPPORT_TICKET</div><div className="text-slate-500 mt-1 font-mono">{"{"}severity, subject, description{"}"}</div></div>
-              <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">CUSTOMER_FEEDBACK</div><div className="text-slate-500 mt-1 font-mono">{"{"}sentiment, text, score{"}"}</div></div>
-            </div>
-            <details><summary className="text-xs font-mono text-slate-600 cursor-pointer">Example bulk payload</summary><pre className="text-xs bg-slate-950 text-slate-200 rounded p-2 mt-1 overflow-auto">{`{
+        <div className="space-y-4">
+          <Card>
+            <SectionHeader title="Step 3 — Telemetry (optional)" subtitle="Bulk events or go straight to investigation. Every event triggers reassessment. Now supports CSV any-shape upload." icon={Zap} />
+            <div className="space-y-3 text-sm">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <div className="font-semibold text-amber-900">You can skip this — investigate with just customers.</div>
+                <div className="text-amber-800 mt-1">For richest signal, bulk-upload historical telemetry via CSV (any shape) below, or via API: <code className="bg-white px-1 rounded">POST /telemetry/upload</code> or <code className="bg-white px-1 rounded">POST /customers/{"{id}"}/events/bulk</code>. Or use Customer 360 → Inject Live Data after.</div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">USAGE_EVENT</div><div className="text-slate-500 mt-1 font-mono">{"{"}daily_active_users, license_utilization{"}"}</div></div>
+                <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">SUPPORT_TICKET</div><div className="text-slate-500 mt-1 font-mono">{"{"}severity, subject, description{"}"}</div></div>
+                <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">CUSTOMER_FEEDBACK</div><div className="text-slate-500 mt-1 font-mono">{"{"}sentiment, text, score{"}"}</div></div>
+              </div>
+              <details><summary className="text-xs font-mono text-slate-600 cursor-pointer">Example bulk payload</summary><pre className="text-xs bg-slate-950 text-slate-200 rounded p-2 mt-1 overflow-auto">{`{
   "events": [
     {"event_type":"USAGE_EVENT","payload":{"daily_active_users":12,"license_utilization":0.18,"feature_clicks":22},"timestamp":"2026-08-30T10:00:00Z"},
     {"event_type":"SUPPORT_TICKET","payload":{"severity":"CRITICAL","subject":"Export fails","status":"OPEN"}},
     {"event_type":"CUSTOMER_FEEDBACK","payload":{"sentiment":"NEGATIVE","text":"Workflow broken","score":2}}
   ]
 }`}</pre></details>
-            <div className="flex gap-2">
-              <button onClick={() => setStep(2)} className="border border-slate-200 bg-white px-3 py-2 rounded-lg text-xs hover:bg-slate-50">← Back</button>
-              <button onClick={() => setStep(4)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-emerald-700">Skip to Done →</button>
+              <div className="flex gap-2">
+                <button onClick={() => setStep(2)} className="border border-slate-200 bg-white px-3 py-2 rounded-lg text-xs hover:bg-slate-50">← Back</button>
+                <button onClick={() => setStep(4)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-emerald-700">Skip to Done →</button>
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+          <TelemetryUpload onSuccess={()=> { setStep(4); }} />
+        </div>
       )}
 
       {/* Step 4 */}

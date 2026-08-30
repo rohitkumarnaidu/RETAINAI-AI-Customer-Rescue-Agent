@@ -7,7 +7,7 @@ import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Form
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
@@ -185,6 +185,9 @@ async def create_customer(payload: Dict[str, Any], db: AsyncSession = Depends(ge
     existing = await db.execute(select(Customer).where(Customer.id == cid))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=409, detail=f"Customer id {cid} already exists")
+    # Capture extra dynamic fields into metadata_json (any keys not in canonical set)
+    canonical_keys = {"name","domain","segment","industry","plan","arr","mrr","csm_name","csm","csm_email","health_score","risk_level","risk","renewal_date","start_date","status","id","customer_id","is_false_positive_candidate"}
+    extra = {k: v for k, v in payload.items() if k.lower() not in canonical_keys and str(v).strip() != ""}
     # Domain duplicate soft check — allow but warn via header? just allow
     customer = Customer(
         id=cid,
@@ -204,6 +207,7 @@ async def create_customer(payload: Dict[str, Any], db: AsyncSession = Depends(ge
         health_score=round(float(health_score),1),
         risk_level=RiskLevel(risk_level_raw),
         is_false_positive_candidate=bool(payload.get("is_false_positive_candidate", False)),
+        metadata_json=extra if extra else None,
     )
     db.add(customer)
     try:
@@ -326,6 +330,13 @@ async def upload_customers_csv(
             risk_enum = RiskLevel(risk_raw)
         except Exception:
             risk_enum = RiskLevel.WATCH
+        # Preserve any extra/dynamic columns into metadata_json (all columns not in canonical set)
+        canonical_lower = {"name","domain","segment","industry","plan","arr","mrr","csm_name","csm","csm_email","health_score","risk_level","risk","renewal_date","start_date","status","id","customer_id","is_false_positive_candidate","health","score","risklevel"}
+        extra_fields = {}
+        for orig_k, v in raw.items():
+            lk = (orig_k or "").strip().lower()
+            if lk not in canonical_lower and lk != "" and v is not None and str(v).strip() != "":
+                extra_fields[orig_k.strip()] = str(v).strip()
         customer = Customer(
             id=cid,
             tenant_id=tenant_id,
@@ -344,6 +355,7 @@ async def upload_customers_csv(
             health_score=round(float(health_score),1),
             risk_level=risk_enum,
             is_false_positive_candidate=str(row.get("is_false_positive_candidate","")).lower() in ("1","true","yes"),
+            metadata_json=extra_fields if extra_fields else None,
         )
         db.add(customer)
         try:
@@ -382,6 +394,492 @@ async def download_customer_csv_template(user: dict = Depends(get_current_user),
         "filename": "retainai_customers_template.csv",
         "csv_text": ",".join(headers) + "\n" + ",".join(sample) + "\n",
         "notes": "Required: name. All others optional. health_score 0-100 auto-sets risk_level if omitted. renewal_date YYYY-MM-DD.",
+    }
+
+
+@router.post("/telemetry/upload")
+async def upload_telemetry_csv(
+    file: UploadFile = File(...),
+    event_type: str = Form(default="AUTO"),
+    customer_id: Optional[str] = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant),
+):
+    """Universal Telemetry CSV upload — handles ANY dataset shape with dynamic column mapping.
+    
+    Supports 4 canonical event types + AUTO detection. Any extra columns are preserved as metadata_json
+    and remain visible in timeline & evidence. Customer resolution via customer_id OR name/domain lookup.
+    
+    Query event_type: USAGE_EVENT | SUPPORT_TICKET | CUSTOMER_FEEDBACK | ACCOUNT_EVENT | AUTO
+    If AUTO, each row's 'event_type' column decides, else uses supplied event_type for all rows.
+    """
+    # Guards
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=422, detail="Telemetry file must be .csv")
+    content = await file.read()
+    if len(content) > 3 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="CSV too large (max 3MB)")
+    if len(content) == 0:
+        raise HTTPException(status_code=422, detail="Empty CSV")
+    try:
+        text = content.decode("utf-8-sig")
+    except Exception:
+        try:
+            text = content.decode("latin-1")
+        except Exception:
+            raise HTTPException(status_code=422, detail="Cannot decode CSV — use UTF-8")
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames is None:
+        raise HTTPException(status_code=422, detail="CSV missing header row")
+    rows = list(reader)
+    if len(rows) == 0:
+        raise HTTPException(status_code=422, detail="CSV contains no data rows")
+    if len(rows) > 800:
+        raise HTTPException(status_code=422, detail=f"Too many rows ({len(rows)}), max 800 per telemetry upload. Split your file.")
+    # Normalize header map lower -> original
+    header_lower_map = { (h or "").strip().lower(): h for h in reader.fieldnames if h }
+    # Helper to get value via alias list (case-insensitive)
+    def _get_alias(row_lower: Dict[str, Any], aliases: List[str]):
+        for a in aliases:
+            al = a.lower()
+            if al in row_lower and str(row_lower[al]).strip() != "":
+                return str(row_lower[al]).strip()
+        return None
+    def _get_row_lower(raw: Dict[str, Any]) -> Dict[str, Any]:
+        return { (k or "").strip().lower(): (v.strip() if isinstance(v, str) else v) for k, v in raw.items() }
+    def _parse_float(v, default=0.0):
+        try:
+            if v is None or str(v).strip() == "":
+                return float(default)
+            return float(str(v).replace(",","").replace("$","").strip())
+        except Exception:
+            return float(default)
+    def _parse_int(v, default=0):
+        try:
+            if v is None or str(v).strip() == "":
+                return int(default)
+            return int(float(str(v).replace(",","").replace("$","").strip()))
+        except Exception:
+            return int(default)
+    def _parse_date(s):
+        if not s or str(s).strip() == "":
+            return datetime.now(timezone.utc)
+        txt = str(s).strip()
+        # Try multiple formats
+        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d"):
+            try:
+                dt = datetime.strptime(txt[:19] if "T" in txt else txt, fmt)
+                return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+            except Exception:
+                continue
+        try:
+            return datetime.fromisoformat(txt.replace("Z","+00:00"))
+        except Exception:
+            return datetime.now(timezone.utc)
+    # Build customer lookup caches for tenant (name/domain -> id)
+    name_to_id: Dict[str, str] = {}
+    domain_to_id: Dict[str, str] = {}
+    try:
+        cust_res = await db.execute(select(Customer.id, Customer.name, Customer.domain).where(Customer.tenant_id == tenant_id))
+        for cid, cname, cdomain in cust_res.all():
+            if cname:
+                name_to_id[cname.strip().lower()] = cid
+                # also slug variant
+                slug = re.sub(r'[^a-z0-9]+','-', cname.lower()).strip('-')
+                if slug:
+                    name_to_id[slug] = cid
+            if cdomain:
+                domain_to_id[cdomain.strip().lower()] = cid
+    except Exception as e:
+        logger.warning(f"telemetry upload: failed to build customer cache: {e}")
+    # Alias maps per event type
+    USAGE_ALIASES = {
+        "daily_active_users": ["daily_active_users","dau","daily_users","active_users","users","daily_active","user_count","dau_count","active_user_count","orders","order_count","transactions","visits"],
+        "wau": ["wau","weekly_active","weekly_users"],
+        "mau": ["mau","monthly_active","monthly_users"],
+        "license_utilization": ["license_utilization","utilization","license_pct","utilization_pct","license_util","capacity_utilization"],
+        "feature_clicks": ["feature_clicks","clicks","feature_usage","feature_adoption","adoption","click_count","feature_click","orders_value","revenue","amount"],
+        "sessions": ["sessions","total_sessions","session_count","visits","page_views","logins"],
+        "usage_minutes": ["usage_minutes","minutes","duration","usage_duration","time_spent","session_duration"],
+        "timestamp": ["timestamp","date","created_at","time","event_date","usage_date","timestamp_utc","datetime","day"],
+    }
+    SUPPORT_ALIASES = {
+        "severity": ["severity","priority","level","urgency","sev"],
+        "status": ["status","state","ticket_status"],
+        "subject": ["subject","title","issue","summary","ticket_subject","problem"],
+        "description": ["description","details","body","text","issue_description","notes","ticket_description"],
+        "category": ["category","type","ticket_type","issue_type","department"],
+        "created_at": ["created_at","timestamp","date","created","opened_at","reported_at","ticket_date"],
+        "csat": ["csat","rating","score","csat_score"],
+    }
+    FEEDBACK_ALIASES = {
+        "sentiment": ["sentiment","feeling","mood","opinion"],
+        "score": ["score","rating","nps","csat","stars","value","nps_score"],
+        "sentiment_score": ["sentiment_score","sentiment_value","polarity","score_normalized"],
+        "text": ["text","comment","feedback","feedback_text","message","content","review","feedback_comment","description"],
+        "source": ["source","channel","origin","feedback_source","type"],
+        "category": ["category","topic","feedback_category","area"],
+        "created_at": ["created_at","timestamp","date","feedback_date","review_date"],
+    }
+    ACCOUNT_ALIASES = {
+        "event_type": ["event_type","type","activity_type","account_event_type","action"],
+        "description": ["description","details","text","summary","notes","activity"],
+        "timestamp": ["timestamp","date","created_at","time","activity_date","event_date"],
+    }
+    CUSTOMER_ID_ALIASES = ["customer_id","customer","customerid","account_id","client_id","org_id","cust_id","id_customer"]
+    CUSTOMER_NAME_ALIASES = ["customer_name","customer","company","account","account_name","client","client_name","organization","org","org_name","name"]
+    CUSTOMER_DOMAIN_ALIASES = ["customer_domain","domain","website","company_domain","account_domain","email_domain"]
+    # Determine effective event type per row
+    def _detect_row_event_type(row_lower: Dict[str, Any], fallback: str) -> str:
+        if fallback and fallback != "AUTO":
+            return fallback.upper()
+        # Try explicit column
+        for col in ["event_type","type","category","source_type"]:
+            if col in row_lower and str(row_lower[col]).strip():
+                v = str(row_lower[col]).strip().upper()
+                if v in ("USAGE_EVENT","SUPPORT_TICKET","CUSTOMER_FEEDBACK","ACCOUNT_EVENT","USAGE","SUPPORT","FEEDBACK","TICKET"):
+                    if v == "USAGE": return "USAGE_EVENT"
+                    if v in ("SUPPORT","TICKET"): return "SUPPORT_TICKET"
+                    if v == "FEEDBACK": return "CUSTOMER_FEEDBACK"
+                    return v if v in ("USAGE_EVENT","SUPPORT_TICKET","CUSTOMER_FEEDBACK","ACCOUNT_EVENT") else fallback
+                # Heuristic based on presence of canonical fields
+        has_usage = any(_get_alias(row_lower, USAGE_ALIASES["daily_active_users"]) is not None or _get_alias(row_lower, ["orders","transactions","visits"]) is not None for _ in [1]) or "dau" in row_lower or "daily_active_users" in row_lower
+        # Simpler heuristic: look at headers
+        keys = set(row_lower.keys())
+        if keys.intersection({"subject","severity","priority","ticket_subject"}):
+            return "SUPPORT_TICKET"
+        if keys.intersection({"sentiment","feedback","review","nps","csat"}):
+            return "CUSTOMER_FEEDBACK"
+        if keys.intersection({"event_type","activity_type","account_event_type"}):
+            # Could be account event
+            return "ACCOUNT_EVENT"
+        if keys.intersection({"dau","daily_active_users","wau","mau","feature_clicks","sessions","usage_minutes","orders","order_count"}):
+            return "USAGE_EVENT"
+        # Default to USAGE_EVENT for numeric telemetry
+        return "USAGE_EVENT" if fallback == "AUTO" else fallback.upper()
+    created = 0
+    skipped = 0
+    errors: List[Dict[str, Any]] = []
+    affected_customers: set = set()
+    from retainai.db.models import UsageEvent, SupportTicket, CustomerFeedback, AccountEvent
+    today = datetime.now(timezone.utc)
+    for idx, raw in enumerate(rows, start=2):
+        row_lower = _get_row_lower(raw)
+        # Resolve customer_id for this row
+        cid = None
+        # 1. Explicit customer_id column
+        cid_candidate = _get_alias(row_lower, CUSTOMER_ID_ALIASES)
+        if cid_candidate and cid_candidate in name_to_id.values():
+            cid = cid_candidate
+        elif cid_candidate and cid_candidate.lower() in [c.lower() for c in name_to_id.values()]:
+            # Direct id match even if not in cache (maybe newly created)
+            try:
+                chk = await db.execute(select(Customer.id).where(Customer.id == cid_candidate).limit(1))
+                if chk.scalar_one_or_none():
+                    cid = cid_candidate
+            except Exception:
+                pass
+        if not cid:
+            # Try explicit customer_id as direct DB check
+            if cid_candidate:
+                try:
+                    chk = await db.execute(select(Customer.id).where(Customer.id == cid_candidate).limit(1))
+                    found = chk.scalar_one_or_none()
+                    if found:
+                        cid = cid_candidate
+                except Exception:
+                    pass
+        if not cid:
+            cname = _get_alias(row_lower, CUSTOMER_NAME_ALIASES)
+            if cname and cname.strip().lower() in name_to_id:
+                cid = name_to_id[cname.strip().lower()]
+        if not cid:
+            cdomain = _get_alias(row_lower, CUSTOMER_DOMAIN_ALIASES)
+            if cdomain and cdomain.strip().lower() in domain_to_id:
+                cid = domain_to_id[cdomain.strip().lower()]
+        if not cid and customer_id:
+            # Use default customer_id provided as form param
+            cid = customer_id
+        if not cid:
+            # Try first customer in tenant as fallback only if single customer tenant? Don't guess, skip
+            skipped += 1
+            errors.append({"row": idx, "error": "No customer_id/name/domain found — add customer_id or customer_name column, or select customer"})
+            continue
+        # Verify customer belongs to tenant
+        try:
+            chk = await db.execute(select(Customer.tenant_id).where(Customer.id == cid))
+            row_tid = chk.scalar_one_or_none()
+            if row_tid is not None and row_tid != tenant_id:
+                skipped += 1
+                errors.append({"row": idx, "error": f"Customer {cid} not in tenant {tenant_id}"})
+                continue
+            elif row_tid is None:
+                skipped += 1
+                errors.append({"row": idx, "error": f"Customer {cid} not found"})
+                continue
+        except Exception:
+            pass
+        # Detect event type for this row
+        eff_type = _detect_row_event_type(row_lower, event_type or "AUTO")
+        if eff_type not in ("USAGE_EVENT","SUPPORT_TICKET","CUSTOMER_FEEDBACK","ACCOUNT_EVENT"):
+            eff_type = "USAGE_EVENT"
+        # Build payload based on type
+        try:
+            ts = None
+            if eff_type == "USAGE_EVENT":
+                ts_raw = _get_alias(row_lower, USAGE_ALIASES["timestamp"])
+                ts = _parse_date(ts_raw) if ts_raw else today - timedelta(days=(idx % 30))
+                dau = _parse_int(_get_alias(row_lower, USAGE_ALIASES["daily_active_users"]), 50)
+                # Generic numeric fallback: if no dau but has orders/transactions/revenue, map to dau/feature_clicks
+                if dau == 0 or dau == 50:
+                    # Try orders/revenue as proxy
+                    orders = _get_alias(row_lower, ["orders","order_count","transactions","visits","count","value","amount","revenue"])
+                    if orders is not None:
+                        try:
+                            dau = int(float(str(orders).replace(",","").strip()) % 200) + 10
+                        except Exception:
+                            pass
+                wau = _parse_int(_get_alias(row_lower, USAGE_ALIASES["wau"]), dau * 4 if dau else 120)
+                mau = _parse_int(_get_alias(row_lower, USAGE_ALIASES["mau"]), wau * 3 if wau else 400)
+                lic = _parse_float(_get_alias(row_lower, USAGE_ALIASES["license_utilization"]), 0.5)
+                clicks = _parse_int(_get_alias(row_lower, USAGE_ALIASES["feature_clicks"]), 20)
+                sess = _parse_int(_get_alias(row_lower, USAGE_ALIASES["sessions"]), 15)
+                mins = _parse_float(_get_alias(row_lower, USAGE_ALIASES["usage_minutes"]), 30.0)
+                # Collect extra fields not in canonical aliases
+                canonical_keys = set([a.lower() for vals in USAGE_ALIASES.values() for a in vals] + [a.lower() for a in CUSTOMER_ID_ALIASES + CUSTOMER_NAME_ALIASES + CUSTOMER_DOMAIN_ALIASES] + ["event_type","type"])
+                extra = {k: str(v).strip() for k, v in raw.items() if (k or "").strip().lower() not in canonical_keys and str(v).strip() != ""}
+                # If extra contains numeric fields that look like metrics, preserve them in metadata
+                ue = UsageEvent(
+                    id= _get_alias(row_lower, ["id","event_id","usage_id"]) or f"usg_{cid[:5]}_{uuid.uuid4().hex[:6]}",
+                    tenant_id=tenant_id,
+                    customer_id=cid,
+                    timestamp=ts,
+                    daily_active_users=dau,
+                    active_users=dau,
+                    wau=wau,
+                    mau=mau,
+                    total_sessions=sess,
+                    license_utilization=max(0.0, min(1.0, lic if lic <=1 else lic/100.0)),
+                    job_completion_rate=_parse_float(_get_alias(row_lower, ["job_completion_rate","completion_rate","efficiency"]), 0.85),
+                    feature_clicks=clicks,
+                    sessions=sess,
+                    usage_minutes=mins,
+                    feature_adoption_rates=extra if extra else {},
+                    event_type="DAILY_SUMMARY",
+                    metadata_json=extra if extra else None,
+                )
+                db.add(ue)
+                affected_customers.add(cid)
+                created += 1
+            elif eff_type == "SUPPORT_TICKET":
+                ts_raw = _get_alias(row_lower, SUPPORT_ALIASES["created_at"])
+                ts = _parse_date(ts_raw) if ts_raw else today - timedelta(days=(idx % 14))
+                severity = (_get_alias(row_lower, SUPPORT_ALIASES["severity"]) or "MEDIUM").upper()
+                if severity not in ("LOW","MEDIUM","HIGH","CRITICAL","URGENT"):
+                    # Map numeric priority 1-5 to severity
+                    try:
+                        sev_num = int(float(severity))
+                        severity = {1:"LOW",2:"MEDIUM",3:"HIGH",4:"CRITICAL",5:"CRITICAL"}.get(sev_num, "MEDIUM")
+                    except Exception:
+                        severity = "MEDIUM"
+                status = (_get_alias(row_lower, SUPPORT_ALIASES["status"]) or "OPEN").upper()
+                if status not in ("OPEN","IN_PROGRESS","RESOLVED","CLOSED"):
+                    status = "OPEN"
+                subject = _get_alias(row_lower, SUPPORT_ALIASES["subject"]) or _get_alias(row_lower, ["issue","summary"]) or "Support Issue"
+                desc = _get_alias(row_lower, SUPPORT_ALIASES["description"]) or subject
+                cat = (_get_alias(row_lower, SUPPORT_ALIASES["category"]) or "BUG").upper()
+                csat_raw = _get_alias(row_lower, SUPPORT_ALIASES["csat"])
+                csat_val = None
+                if csat_raw is not None:
+                    try:
+                        csat_val = int(float(str(csat_raw).strip()))
+                        csat_val = max(1, min(5, csat_val))
+                    except Exception:
+                        csat_val = None
+                canonical_keys = set([a.lower() for vals in SUPPORT_ALIASES.values() for a in vals] + [a.lower() for a in CUSTOMER_ID_ALIASES + CUSTOMER_NAME_ALIASES + CUSTOMER_DOMAIN_ALIASES] + ["event_type","type"])
+                extra = {k: str(v).strip() for k, v in raw.items() if (k or "").strip().lower() not in canonical_keys and str(v).strip() != ""}
+                ticket = SupportTicket(
+                    id= _get_alias(row_lower, ["id","ticket_id","event_id"]) or f"tck_{cid[:5]}_{uuid.uuid4().hex[:6]}",
+                    tenant_id=tenant_id,
+                    customer_id=cid,
+                    created_at=ts,
+                    resolved_at=None if status in ("OPEN","IN_PROGRESS") else ts + timedelta(days=1),
+                    severity=severity,
+                    category=cat,
+                    status=status,
+                    csat=csat_val,
+                    subject=subject[:200],
+                    description=desc[:2000],
+                    metadata_json=extra if extra else None,
+                )
+                db.add(ticket)
+                affected_customers.add(cid)
+                created += 1
+            elif eff_type == "CUSTOMER_FEEDBACK":
+                ts_raw = _get_alias(row_lower, FEEDBACK_ALIASES["created_at"])
+                ts = _parse_date(ts_raw) if ts_raw else today - timedelta(days=(idx % 10))
+                sentiment_raw = (_get_alias(row_lower, FEEDBACK_ALIASES["sentiment"]) or "").upper()
+                if sentiment_raw not in ("POSITIVE","NEUTRAL","NEGATIVE"):
+                    # Infer from score
+                    score_tmp = _get_alias(row_lower, FEEDBACK_ALIASES["score"])
+                    if score_tmp is not None:
+                        try:
+                            s = float(str(score_tmp).strip())
+                            if s <= 2 or s <= 3 and score_tmp and float(score_tmp) <=3: sentiment_raw = "NEGATIVE"
+                            elif s >= 4: sentiment_raw = "POSITIVE"
+                            else: sentiment_raw = "NEUTRAL"
+                        except Exception:
+                            sentiment_raw = "NEUTRAL"
+                    else:
+                        txt = (_get_alias(row_lower, FEEDBACK_ALIASES["text"]) or "").lower()
+                        if any(w in txt for w in ["bad","terrible","broken","fail","frustrat","angry","disappoint"]):
+                            sentiment_raw = "NEGATIVE"
+                        elif any(w in txt for w in ["great","love","excellent","awesome","amazing","good"]):
+                            sentiment_raw = "POSITIVE"
+                        else:
+                            sentiment_raw = "NEUTRAL"
+                score_raw = _get_alias(row_lower, FEEDBACK_ALIASES["score"])
+                score_val = None
+                if score_raw is not None:
+                    try:
+                        score_val = int(float(str(score_raw).strip()))
+                    except Exception:
+                        score_val = None
+                sent_score = _parse_float(_get_alias(row_lower, FEEDBACK_ALIASES["sentiment_score"]), 0.0)
+                if sent_score == 0.0:
+                    sent_score = {"POSITIVE":0.8,"NEUTRAL":0.0,"NEGATIVE":-0.8}.get(sentiment_raw, 0.0)
+                text_raw = _get_alias(row_lower, FEEDBACK_ALIASES["text"]) or _get_alias(row_lower, ["comment","review","feedback_text","message"]) or ""
+                source = (_get_alias(row_lower, FEEDBACK_ALIASES["source"]) or "CSAT_SURVEY").upper()
+                cat = (_get_alias(row_lower, FEEDBACK_ALIASES["category"]) or "GENERAL").upper()
+                canonical_keys = set([a.lower() for vals in FEEDBACK_ALIASES.values() for a in vals] + [a.lower() for a in CUSTOMER_ID_ALIASES + CUSTOMER_NAME_ALIASES + CUSTOMER_DOMAIN_ALIASES] + ["event_type","type","comment","review"])
+                extra = {k: str(v).strip() for k, v in raw.items() if (k or "").strip().lower() not in canonical_keys and str(v).strip() != ""}
+                fb = CustomerFeedback(
+                    id= _get_alias(row_lower, ["id","feedback_id","event_id"]) or f"fb_{cid[:5]}_{uuid.uuid4().hex[:6]}",
+                    tenant_id=tenant_id,
+                    customer_id=cid,
+                    created_at=ts,
+                    source=source,
+                    score=score_val,
+                    sentiment=sentiment_raw,
+                    sentiment_score=max(-1.0, min(1.0, sent_score)),
+                    text=text_raw[:2000],
+                    comment=text_raw[:2000] if text_raw else None,
+                    category=cat,
+                    metadata_json=extra if extra else None,
+                )
+                db.add(fb)
+                affected_customers.add(cid)
+                created += 1
+            elif eff_type == "ACCOUNT_EVENT":
+                ts_raw = _get_alias(row_lower, ACCOUNT_ALIASES["timestamp"])
+                ts = _parse_date(ts_raw) if ts_raw else today - timedelta(days=(idx % 20))
+                evt_type = (_get_alias(row_lower, ACCOUNT_ALIASES["event_type"]) or "GENERIC_EVENT").upper()
+                desc = _get_alias(row_lower, ACCOUNT_ALIASES["description"]) or str(list(raw.values())[0])[:500] if raw else "Account Event"
+                canonical_keys = set([a.lower() for vals in ACCOUNT_ALIASES.values() for a in vals] + [a.lower() for a in CUSTOMER_ID_ALIASES + CUSTOMER_NAME_ALIASES + CUSTOMER_DOMAIN_ALIASES] + ["event_type","type"])
+                extra = {k: str(v).strip() for k, v in raw.items() if (k or "").strip().lower() not in canonical_keys and str(v).strip() != ""}
+                ae = AccountEvent(
+                    id= _get_alias(row_lower, ["id","event_id"]) or f"acct_{cid[:5]}_{uuid.uuid4().hex[:6]}",
+                    tenant_id=tenant_id,
+                    customer_id=cid,
+                    timestamp=ts,
+                    event_type=evt_type,
+                    description=desc[:1000],
+                    metadata_json=extra if extra else None,
+                )
+                db.add(ae)
+                affected_customers.add(cid)
+                created += 1
+            else:
+                skipped += 1
+                errors.append({"row": idx, "error": f"Unsupported event_type {eff_type}"})
+        except Exception as e:
+            skipped += 1
+            errors.append({"row": idx, "error": str(e)[:200]})
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            continue
+        try:
+            await db.flush()
+        except Exception as e:
+            await db.rollback()
+            skipped += 1
+            errors.append({"row": idx, "error": f"DB flush failed: {str(e)[:150]}"})
+            continue
+    # Commit all telemetry
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Telemetry commit failed: {str(e)[:300]}")
+    # Trigger reassessment for affected customers
+    reassessed = 0
+    reassess_errors = []
+    from retainai.services.customer_service import CustomerService
+    for cid in list(affected_customers)[:50]:  # limit 50 to avoid heavy load
+        try:
+            svc = CustomerService(db, tenant_id=tenant_id)
+            await svc.reassess_customer_risk(cid)
+            reassessed += 1
+        except Exception as e:
+            reassess_errors.append(str(e)[:100])
+    return {
+        "status": "success",
+        "created": created,
+        "skipped": skipped,
+        "total_rows": len(rows),
+        "errors": errors[:20],
+        "message": f"Telemetry imported: {created} events, skipped {skipped} of {len(rows)} rows. Reassessed {reassessed} customers.",
+        "affected_customers": list(affected_customers)[:20],
+        "reassessed": reassessed,
+    }
+
+
+@router.get("/telemetry/template/csv")
+async def download_telemetry_csv_template(
+    event_type: str = "USAGE_EVENT",
+    user: dict = Depends(get_current_user),
+    tenant_id: str = Depends(require_tenant),
+):
+    """Returns CSV template for telemetry upload — documents expected columns per event type + generic."""
+    templates = {
+        "USAGE_EVENT": {
+            "headers": ["customer_name","timestamp","daily_active_users","feature_clicks","sessions","license_utilization","wau","mau"],
+            "sample": ["Acme Corp","2026-08-25","42","120","18","0.45","150","400"],
+            "notes": "Maps any numeric column: orders/transactions/visits -> dau fallback. Extra columns preserved as metadata_json.",
+        },
+        "SUPPORT_TICKET": {
+            "headers": ["customer_name","created_at","severity","status","subject","description","category"],
+            "sample": ["Acme Corp","2026-08-28","CRITICAL","OPEN","Export fails","Dataset export times out for large files","BUG"],
+            "notes": "Severity auto-maps numeric 1-5; status defaults OPEN.",
+        },
+        "CUSTOMER_FEEDBACK": {
+            "headers": ["customer_name","created_at","sentiment","score","text","source","category"],
+            "sample": ["Acme Corp","2026-08-29","NEGATIVE","2","Workflow broken, need help","CSAT_SURVEY","GENERAL"],
+            "notes": "Sentiment inferred from score/text if blank; score 1-5.",
+        },
+        "ACCOUNT_EVENT": {
+            "headers": ["customer_name","timestamp","event_type","description"],
+            "sample": ["Acme Corp","2026-08-30","ADMIN_LOGIN","Admin workspace login"],
+            "notes": "Generic account activity; extra columns -> metadata_json.",
+        },
+        "AUTO": {
+            "headers": ["customer_name","event_type","timestamp","daily_active_users","subject","sentiment","text","description"],
+            "sample": ["Acme Corp","USAGE_EVENT","2026-08-25","42","","","",""],
+            "notes": "AUTO detects per-row event_type from column + headers. Mix usage/support/feedback in one CSV.",
+        },
+    }
+    t = templates.get(event_type.upper(), templates["USAGE_EVENT"])
+    return {
+        "event_type": event_type.upper(),
+        "headers": t["headers"],
+        "sample_row": t["sample"],
+        "filename": f"retainai_telemetry_{event_type.lower()}_template.csv",
+        "csv_text": ",".join(t["headers"]) + "\n" + ",".join(t["sample"]) + "\n",
+        "notes": t["notes"],
+        "all_templates": templates,
     }
 
 

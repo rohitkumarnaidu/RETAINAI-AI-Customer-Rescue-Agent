@@ -136,6 +136,75 @@ export const seedSample = async (): Promise<{status:string;seeded:number;skipped
   const r = await api.post('/system/seed-sample');
   return r.data;
 };
+export const getSampleStats = async (): Promise<{customers:number;usage:number;tickets:number;feedbacks:number;total:number}> => {
+  const r = await api.get('/system/sample-stats');
+  return r.data;
+};
+
+// — Parallel Multi-Agent Chat (5 agents + streaming) —
+export interface ChatMessage { id:string; role:string; content:string; agent_traces?:any[]; model?:string; latency_ms?:number; created_at?:string; }
+export interface ChatConversation { id:string; title:string; customer_id?:string; message_count:number; created_at?:string; updated_at?:string; }
+export interface ChatAskPayload { message:string; customer_id?:string; conversation_id?:string; history?:{role:string;content:string}[]; }
+export interface ChatAskResponse { answer:string; conversation_id:string; message_id:string; customer_id?:string; evidence_ids:string[]; traces:any[]; latency_ms:number; model:string; provider:string; }
+
+export const sendChat = async (payload: ChatAskPayload): Promise<ChatAskResponse> => {
+  const r = await api.post<ChatAskResponse>('/chat', payload);
+  return r.data;
+};
+export const getChatConversations = async (customerId?:string): Promise<ChatConversation[]> => {
+  const url = customerId ? `/chat/conversations?customer_id=${encodeURIComponent(customerId)}` : '/chat/conversations';
+  const r = await api.get<ChatConversation[]>(url);
+  return r.data;
+};
+export const getChatMessages = async (conversationId:string): Promise<ChatMessage[]> => {
+  const r = await api.get<ChatMessage[]>(`/chat/conversations/${conversationId}/messages`);
+  return r.data;
+};
+export const deleteChatConversation = async (conversationId:string): Promise<void> => {
+  await api.delete(`/chat/conversations/${conversationId}`);
+};
+export const streamChat = async (
+  payload: ChatAskPayload,
+  onEvent: (evt:{type:string; content?:string; agent?:string; conversation_id?:string; provider?:string; model?:string})=>void,
+  onError?: (msg:string)=>void,
+): Promise<void> => {
+  const token = (()=>{ try{return localStorage.getItem('retainai_jwt')}catch{return null}})();
+  const tenantId = (()=>{ try{return localStorage.getItem('retainai_tenant_id')||localStorage.getItem('retainai_tenantId')||'demo-tenant-001'}catch{return 'demo-tenant-001'}})();
+  const headers: Record<string,string> = {'Content-Type':'application/json', 'X-Tenant-Id': tenantId};
+  if(token) headers['Authorization']=`Bearer ${token}`;
+  const base = API_BASE_URL.startsWith('/') ? '' : '';
+  const url = `${base}${API_BASE_URL}/chat/stream`;
+  const resp = await fetch(url, {method:'POST', headers, body: JSON.stringify(payload)});
+  if(!resp.ok){
+    const txt=await resp.text().catch(()=>'');
+    throw new Error(txt || `Chat stream failed ${resp.status}`);
+  }
+  if(!resp.body){ throw new Error('No stream body'); }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buf='';
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    buf+=decoder.decode(value,{stream:true});
+    const parts = buf.split('\n\n');
+    buf=parts.pop()||'';
+    for(const part of parts){
+      const line = part.trim();
+      if(!line) continue;
+      if(line==='data: [DONE]'){ return; }
+      if(line.startsWith('data: ')){
+        const data=line.slice(6).trim();
+        if(data==='[DONE]') return;
+        try{
+          const obj=JSON.parse(data);
+          onEvent(obj);
+          if(obj.type==='error' && onError) onError(obj.content||'Stream error');
+        }catch{}
+      }
+    }
+  }
+};
 
 // — Phase 1 & 3: Auth & Org Settings —
 export const signup = async (email:string,password:string,orgName:string): Promise<{access_token:string;tenant_id:string;user_id:string}> => {

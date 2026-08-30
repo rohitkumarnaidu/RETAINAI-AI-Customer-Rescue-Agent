@@ -57,7 +57,8 @@ export const DataHubView: React.FC<{ onSelectCustomer?: (id: string) => void }> 
   };
   const syntheticFolders: UploadEntry[] = useMemo(() => {
     const f: UploadEntry[] = [];
-    if (customers.length > 0) {
+    // Always 4 live DB folders — even when 0 rows (shows empty state, proves 4 sources)
+    {
       const headers = ['name','domain','segment','industry','plan','arr','mrr','csm_name','csm_email','health_score','risk_level','renewal_date','status'];
       const rows: Record<string,string>[] = customers.map((c:any) => ({
         name: String(c.name||''), domain: String(c.domain||''), segment: String(c.segment||''), industry: String(c.industry||''), plan: String(c.plan||''),
@@ -66,19 +67,19 @@ export const DataHubView: React.FC<{ onSelectCustomer?: (id: string) => void }> 
       const csvText = [headers.join(','), ...rows.map(r=> headers.map(h=> csvEscapeSyn(r[h])).join(','))].join('\n');
       f.push({ id:'__db_customers__', filename:`customers_db_${customers.length}_rows.csv`, uploadDate: new Date().toISOString(), headers, rows, csvText, totalRows: rows.length, created: rows.length, skipped:0, sizeKB: csvText.length/1024, tenantId, backendResult:{synthetic:true, source:'db_customers'} } as UploadEntry);
     }
-    if (usage.length > 0) {
+    {
       const headers = ['timestamp','source','title','description'];
       const rows: Record<string,string>[] = usage.map((e:any)=> ({ timestamp: String(e.timestamp||''), source: String(e.source||''), title: String(e.title||''), description: String(e.description||'') }));
       const csvText = [headers.join(','), ...rows.map(r=> headers.map(h=> csvEscapeSyn(r[h])).join(','))].join('\n');
       f.push({ id:'__db_usage__', filename:`usage_events_${usage.length}_rows.csv`, uploadDate: new Date().toISOString(), headers, rows, csvText, totalRows: rows.length, created: rows.length, skipped:0, sizeKB: csvText.length/1024, tenantId, backendResult:{synthetic:true, source:'db_usage'} } as UploadEntry);
     }
-    if (support.length > 0) {
+    {
       const headers = ['timestamp','source','title','description'];
       const rows: Record<string,string>[] = support.map((e:any)=> ({ timestamp: String(e.timestamp||''), source: String(e.source||''), title: String(e.title||''), description: String(e.description||'') }));
       const csvText = [headers.join(','), ...rows.map(r=> headers.map(h=> csvEscapeSyn(r[h])).join(','))].join('\n');
       f.push({ id:'__db_support__', filename:`support_tickets_${support.length}_rows.csv`, uploadDate: new Date().toISOString(), headers, rows, csvText, totalRows: rows.length, created: rows.length, skipped:0, sizeKB: csvText.length/1024, tenantId, backendResult:{synthetic:true, source:'db_support'} } as UploadEntry);
     }
-    if (feedback.length > 0) {
+    {
       const headers = ['timestamp','source','title','description'];
       const rows: Record<string,string>[] = feedback.map((e:any)=> ({ timestamp: String(e.timestamp||''), source: String(e.source||''), title: String(e.title||''), description: String(e.description||'') }));
       const csvText = [headers.join(','), ...rows.map(r=> headers.map(h=> csvEscapeSyn(r[h])).join(','))].join('\n');

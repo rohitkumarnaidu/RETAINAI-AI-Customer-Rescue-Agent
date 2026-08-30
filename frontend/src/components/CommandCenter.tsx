@@ -1,16 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { getPortfolio } from '../services/api';
+import { getPortfolio, getCustomers, getCustomerTimeline } from '../services/api';
 import { RiskBadge, HealthRing } from './RiskBadge';
 import { Card, SkeletonCard, ErrorState, EmptyState } from './ui';
-import { TrendingDown, ShieldAlert, Activity, Clock, ArrowUpRight, FileSpreadsheet, Upload } from 'lucide-react';
+import { TrendingDown, ShieldAlert, Activity, Clock, ArrowUpRight, FileSpreadsheet, Upload, MessageSquare, LifeBuoy, Users } from 'lucide-react';
 
 export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({onSelectCustomer})=>{
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [datasetFilter, setDatasetFilter] = useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
+  const [datasetCounts, setDatasetCounts] = useState<{usage:number;support:number;feedback:number} | null>(null);
   const load = async()=>{
-    try{ setLoading(true); setError(null); const p=await getPortfolio(); setData(p); }
+    try{ setLoading(true); setError(null); const p=await getPortfolio(); setData(p);
+      // fetch 4 dataset counts live
+      try{
+        const cs = p?.customers || await getCustomers().catch(()=>[]);
+        const slice = (cs as any[]).slice(0, 10);
+        const tls = await Promise.all(slice.map((c:any)=> getCustomerTimeline(c.id, 30).catch(()=>[])));
+        const flat = (tls as any).flat();
+        const usage = flat.filter((e:any)=> (e.source||'').toUpperCase().includes('USAGE')).length;
+        const support = flat.filter((e:any)=> (e.source||'').toUpperCase().includes('SUPPORT') || (e.source||'').toUpperCase().includes('TICKET')).length;
+        const feedback = flat.filter((e:any)=> (e.source||'').toUpperCase().includes('FEEDBACK') || (e.source||'').toUpperCase().includes('CSAT')).length;
+        setDatasetCounts({usage, support, feedback});
+      } catch{ setDatasetCounts(null); }
+    }
     catch(e:any){ setError(e.message||'Failed to load'); }
     finally{ setLoading(false); }
   };
@@ -84,6 +98,57 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
         </Card>
       </div>
 
+      {/* 4 Datasets — live with filter All + 4 */}
+      <Card>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="text-xs font-mono tracking-wide text-slate-500">LIVE DATASETS · 4 tenant-isolated · Data Hub folders</div>
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-full p-1">
+            {(['all','customers','usage','support','feedback'] as const).map(f=>(
+              <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-medium capitalize ${datasetFilter===f ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'}`}>{f==='all' ? 'All 4' : f}</button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-2 text-[11px] font-mono">
+          <span className="bg-slate-900 text-white px-2 py-0.5 rounded-full">{datasetCounts ? `${customers.length} · ${datasetCounts.usage} · ${datasetCounts.support} · ${datasetCounts.feedback}` : 'loading…'}</span>
+          <span className="text-slate-500">{datasetFilter==='all' ? 'Showing all 4' : `Filtered: ${datasetFilter}`}</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          {(datasetFilter==='all' || datasetFilter==='customers') && (
+          <div className={`border rounded-xl p-3 text-center transition ${datasetFilter==='customers' ? 'border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200' : 'border-emerald-200 bg-emerald-50'}`}>
+            <Users className="w-5 h-5 mx-auto text-emerald-600" />
+            <div className="text-xs font-bold mt-1">Customers</div>
+            <div className="text-xl font-bold">{customers.length}</div>
+            <div className="text-[11px] text-slate-500 font-mono">13 cols · DB</div>
+          </div>
+          )}
+          {(datasetFilter==='all' || datasetFilter==='usage') && (
+          <div className={`border rounded-xl p-3 text-center transition ${datasetFilter==='usage' ? 'border-blue-400 bg-blue-50 ring-2 ring-blue-200' : 'border-blue-200 bg-blue-50'}`}>
+            <Activity className="w-5 h-5 mx-auto text-blue-600" />
+            <div className="text-xs font-bold mt-1">Usage</div>
+            <div className="text-xl font-bold">{datasetCounts ? datasetCounts.usage : '—'}</div>
+            <div className="text-[11px] text-slate-500 font-mono">events · live</div>
+          </div>
+          )}
+          {(datasetFilter==='all' || datasetFilter==='support') && (
+          <div className={`border rounded-xl p-3 text-center transition ${datasetFilter==='support' ? 'border-orange-400 bg-orange-50 ring-2 ring-orange-200' : 'border-orange-200 bg-orange-50'}`}>
+            <LifeBuoy className="w-5 h-5 mx-auto text-orange-600" />
+            <div className="text-xs font-bold mt-1">Support</div>
+            <div className="text-xl font-bold">{datasetCounts ? datasetCounts.support : '—'}</div>
+            <div className="text-[11px] text-slate-500 font-mono">tickets · live</div>
+          </div>
+          )}
+          {(datasetFilter==='all' || datasetFilter==='feedback') && (
+          <div className={`border rounded-xl p-3 text-center transition ${datasetFilter==='feedback' ? 'border-purple-400 bg-purple-50 ring-2 ring-purple-200' : 'border-purple-200 bg-purple-50'}`}>
+            <MessageSquare className="w-5 h-5 mx-auto text-purple-600" />
+            <div className="text-xs font-bold mt-1">Feedback</div>
+            <div className="text-xl font-bold">{datasetCounts ? datasetCounts.feedback : '—'}</div>
+            <div className="text-[11px] text-slate-500 font-mono">entries · live</div>
+          </div>
+          )}
+        </div>
+        <div className="text-xs text-slate-500 mt-2">All 4 are tenant-isolated — filter by dataset above or see <b>Data Hub → 4 folders</b> for complete CSVs. Updates on Refresh.</div>
+      </Card>
+
       <Card padding="p-0">
         <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-2">
           <div>
@@ -92,20 +157,26 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
           </div>
           <button onClick={load} className="text-xs border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"><Clock className="w-3 h-3" />Refresh</button>
         </div>
+        {/* Header row — labels columns, so circle no longer needs HEALTH text */}
+        <div className="hidden sm:flex items-center gap-3 px-4 py-2 bg-slate-50 border-y border-slate-200 text-[11px] font-mono tracking-wide text-slate-500">
+          <span className="w-[44px] text-center shrink-0">HEALTH</span>
+          <span className="flex-1">CUSTOMER</span>
+          <span className="w-[110px] text-right shrink-0">RISK</span>
+        </div>
         <div className="divide-y divide-slate-100 max-h-[420px] overflow-auto">
           {critical.slice(0,8).map((c:any)=>(
             <button key={c.id} onClick={()=>onSelectCustomer(c.id)} className="w-full text-left p-4 hover:bg-slate-50 flex items-center gap-3">
-              <HealthRing score={c.health_score} size={44} />
+              <HealthRing score={c.health_score} size={44} hideLabel />
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{c.name}</div>
-                <div className="text-xs text-slate-500 truncate">{c.domain} · {c.segment} · {c.csm_name}</div>
+                <div className="text-xs text-slate-500 truncate">{c.domain} · {c.segment} · {c.csm_name} — Health {Math.round(c.health_score)}</div>
               </div>
               <RiskBadge level={c.risk_level} size="sm" />
             </button>
           ))}
           {critical.length===0 && watch.slice(0,8).map((c:any)=>(
             <button key={c.id} onClick={()=>onSelectCustomer(c.id)} className="w-full text-left p-4 hover:bg-slate-50 flex items-center gap-3">
-              <HealthRing score={c.health_score} size={44} />
+              <HealthRing score={c.health_score} size={44} hideLabel />
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{c.name}</div>
                 <div className="text-xs text-slate-500 truncate">{c.segment} · {c.csm_name} · Health {Math.round(c.health_score)}</div>

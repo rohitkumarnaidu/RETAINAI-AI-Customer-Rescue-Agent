@@ -9,6 +9,7 @@ export const InterventionsView: React.FC = ()=>{
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState<string|null>(null);
   const [filter,setFilter]=useState<string>('ALL');
+  const [datasetFilter, setDatasetFilter] = useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
   const [outcomeFor,setOutcomeFor]=useState<string|null>(null);
   const [healthAfter,setHealthAfter]=useState('');
   const [usageAfter,setUsageAfter]=useState('');
@@ -42,7 +43,15 @@ export const InterventionsView: React.FC = ()=>{
     if(steps.length) return steps.map((s:any)=>s.title || s.action || '').filter(Boolean).join(' → ').slice(0,120);
     return iv.description || (typeof iv.plan==='string' && iv.plan.length<200 ? iv.plan : '') || '';
   };
-  const filtered = filter==='ALL' ? inters : inters.filter((x:any)=> (x.status||'').toUpperCase()===filter);
+  const datasetFiltered = datasetFilter==='all' ? inters : inters.filter((iv:any)=>{
+    const txt = `${iv.action_type||''} ${iv.title||''} ${iv.description||''} ${JSON.stringify(iv.plan||'')}`.toLowerCase();
+    if(datasetFilter==='customers') return true;
+    if(datasetFilter==='usage') return txt.includes('usage') || txt.includes('adoption') || txt.includes('dau') || txt.includes('active');
+    if(datasetFilter==='support') return txt.includes('support') || txt.includes('ticket') || txt.includes('bug') || txt.includes('escalat');
+    if(datasetFilter==='feedback') return txt.includes('feedback') || txt.includes('sentiment') || txt.includes('csat') || txt.includes('nps');
+    return true;
+  });
+  const filtered = filter==='ALL' ? datasetFiltered : datasetFiltered.filter((x:any)=> (x.status||'').toUpperCase()===filter);
   const outcomeByIntervention = new Map(outcomes.map((o:any)=>[o.intervention_id, o]));
 
   if(loading) return <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{[1,2,3,4].map(i=><SkeletonCard key={i}/>)}</div>;
@@ -73,7 +82,14 @@ export const InterventionsView: React.FC = ()=>{
           {['ALL','PROPOSED','APPROVED','REJECTED','COMPLETED','IN_PROGRESS'].map(f=>(
             <button key={f} onClick={()=>setFilter(f)} className={`px-2.5 py-1 rounded-full text-xs border ${filter===f?'bg-slate-900 text-white border-slate-900':'bg-white text-slate-600 border-slate-200'}`}>{f}</button>
           ))}
-          <span className="ml-2 text-xs text-slate-500 font-mono">{filtered.length} of {inters.length}</span>
+          <span className="ml-2 text-xs text-slate-500 font-mono">{filtered.length} of {datasetFiltered.length} · {inters.length} total</span>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-mono text-slate-500">Dataset:</span>
+          {(['all','customers','usage','support','feedback'] as const).map(f=>(
+            <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-2.5 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f==='all' ? 'All 4' : f}</button>
+          ))}
+          <span className="text-xs text-slate-500 ml-1">{datasetFilter==='all' ? 'all datasets' : datasetFilter} · {datasetFiltered.length} interventions</span>
         </div>
         {toast && <div className="mt-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-2 rounded-lg">{toast}</div>}
       </Card>

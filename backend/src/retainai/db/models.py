@@ -157,6 +157,7 @@ class Customer(Base):
     health_score: Mapped[float] = mapped_column(Float, nullable=False, default=100.0)
     risk_level: Mapped[RiskLevel] = mapped_column(SQLEnum(RiskLevel), nullable=False, default=RiskLevel.HEALTHY)
     is_false_positive_candidate: Mapped[bool] = mapped_column(Boolean, default=False)
+    metadata_json: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -249,6 +250,7 @@ class SupportTicket(Base):
     csat: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-5
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    metadata_json: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True, default=dict)
 
     customer: Mapped["Customer"] = relationship(back_populates="support_tickets")
 
@@ -274,6 +276,7 @@ class CustomerFeedback(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     category: Mapped[str] = mapped_column(String(50), nullable=False, default="GENERAL")
+    metadata_json: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True, default=dict)
 
     customer: Mapped["Customer"] = relationship(back_populates="feedback_entries")
 
@@ -623,5 +626,48 @@ class SystemEventLog(Base):
         Index("idx_syslog_tenant", "tenant_id"),
         Index("idx_syslog_customer_time", "customer_id", "timestamp"),
         Index("idx_syslog_type", "event_type"),
+        {"extend_existing": True},
+    )
+
+
+# ── Chat (Parallel Multi-Agent) ──────────────────────────────────────────────
+
+class ChatConversation(Base):
+    __tablename__ = "chat_conversations"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
+    customer_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("customers.id"), nullable=True, index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("users.id"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="New chat")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    message_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    __table_args__ = (
+        Index("idx_chat_conv_tenant", "tenant_id"),
+        Index("idx_chat_conv_customer", "customer_id"),
+        {"extend_existing": True},
+    )
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
+    conversation_id: Mapped[str] = mapped_column(String(80), ForeignKey("chat_conversations.id"), nullable=False, index=True)
+    customer_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("customers.id"), nullable=True, index=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # user | assistant | system
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    agent_traces: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True, default=list)
+    model: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    latency_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("idx_chat_msg_tenant", "tenant_id"),
+        Index("idx_chat_msg_conv", "conversation_id"),
+        Index("idx_chat_msg_customer", "customer_id"),
         {"extend_existing": True},
     )

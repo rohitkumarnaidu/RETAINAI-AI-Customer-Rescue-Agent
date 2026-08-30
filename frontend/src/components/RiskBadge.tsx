@@ -12,7 +12,7 @@ export const RiskBadge: React.FC<{level:string; size?:'sm'|'md'|'lg'; showDot?:b
   return <span className={`inline-flex items-center gap-1.5 rounded-full border font-mono tracking-wide font-medium whitespace-nowrap shrink-0 leading-none ${cls} ${sz}`}>{showDot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />}{u.split('_').join(' ')}</span>;
 };
 
-export const HealthRing: React.FC<{score:number; size?:number}> = ({score, size=56})=>{
+export const HealthRing: React.FC<{score:number; size?:number; hideLabel?:boolean}> = ({score, size=56, hideLabel=false})=>{
   const pct = Math.max(0,Math.min(100, score));
   const r=24, circ=2*Math.PI*r, off=circ - (pct/100)*circ;
   let color='#0F766E'; if(pct<50) color='#DC2626'; else if(pct<75) color='#D97706';
@@ -25,7 +25,7 @@ export const HealthRing: React.FC<{score:number; size?:number}> = ({score, size=
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
         <span className={`${isCompact ? 'text-[11px]' : 'text-sm'} font-bold text-slate-900 leading-none`}>{Math.round(pct)}</span>
-        {!isCompact && <span className="text-[9px] text-slate-500 font-mono leading-none mt-0.5">HEALTH</span>}
+        {!isCompact && !hideLabel && <span className="text-[9px] text-slate-500 font-mono leading-none mt-0.5">HEALTH</span>}
       </div>
     </div>
   );

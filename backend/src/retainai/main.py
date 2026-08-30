@@ -25,6 +25,12 @@ except Exception as _auth_e:
     import logging as _lg
     _lg.getLogger("retainai.api").warning(f"Auth router not loaded: {_auth_e}")
     auth_router = None  # type: ignore
+try:
+    from retainai.api.chat_routes import router as chat_router
+except Exception as _chat_e:
+    import logging as _lg3
+    _lg3.getLogger("retainai.api").warning(f"Chat router not loaded: {_chat_e}")
+    chat_router = None  # type: ignore
 
 logger = logging.getLogger("retainai.api")
 
@@ -286,6 +292,8 @@ if ingest_router is not None:
     app.include_router(ingest_router)
 if auth_router is not None:
     app.include_router(auth_router)
+if 'chat_router' in globals() and chat_router is not None:
+    app.include_router(chat_router)
 
 
 @app.get("/health")

@@ -9,6 +9,7 @@ export const InvestigationsView: React.FC<{onSelectCustomer:(id:string)=>void}> 
   const [error,setError]=useState<string|null>(null);
   const [selectedRun,setSelectedRun]=useState<any>(null);
   const [detail,setDetail]=useState<any>(null);
+  const [datasetFilter, setDatasetFilter] = useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
 
   const load=async()=>{
     try{
@@ -36,20 +37,36 @@ export const InvestigationsView: React.FC<{onSelectCustomer:(id:string)=>void}> 
   if(loading) return <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{[1,2,3,4].map(i=><SkeletonCard key={i}/>)}</div>;
   if(error) return <ErrorState message={error} onRetry={load}/>;
 
+  const filteredRuns = runs.filter((r:any)=>{
+    if(datasetFilter==='all') return true;
+    const txt = `${r.output_summary||''} ${r.input_summary||''} ${r.customer_name||''}`.toLowerCase();
+    if(datasetFilter==='customers') return true;
+    if(datasetFilter==='usage') return txt.includes('usage') || txt.includes('dau') || txt.includes('active') || txt.includes('decline');
+    if(datasetFilter==='support') return txt.includes('ticket') || txt.includes('support') || txt.includes('bug') || txt.includes('critical');
+    if(datasetFilter==='feedback') return txt.includes('feedback') || txt.includes('sentiment') || txt.includes('csat') || txt.includes('nps');
+    return true;
+  });
+
   return (
     <div className="space-y-4">
       <Card>
         <h2 className="text-lg font-semibold flex items-center gap-2"><SearchCode className="w-5 h-5"/> Investigations</h2>
         <p className="text-sm text-slate-600 mt-1">Agent runs — evidence gathering, root-cause synthesis, confidence. Click a run to view state history and tool calls.</p>
-        <p className="text-xs text-slate-500 mt-1">Most recent {runs.length} runs across top 20 accounts · Real backend data (AgentRun + AgentStep)</p>
+        <p className="text-xs text-slate-500 mt-1">Most recent {runs.length} runs across top 20 accounts · Real backend data (AgentRun + AgentStep) · Filter by dataset below</p>
+        <div className="flex flex-wrap gap-1.5 mt-3">
+          {(['all','customers','usage','support','feedback'] as const).map(f=>(
+            <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f==='all' ? 'All 4' : f}</button>
+          ))}
+          <span className="text-xs text-slate-500 self-center ml-1">{filteredRuns.length} of {runs.length} · {datasetFilter==='all' ? 'all datasets' : datasetFilter}</span>
+        </div>
       </Card>
 
-      {runs.length===0 ? <EmptyState title="No investigations yet" description="Run an investigation from Customer 360 to generate an agent trace." /> : (
+      {filteredRuns.length===0 ? <EmptyState title="No investigations yet" description={runs.length===0 ? "Run an investigation from Customer 360 to generate an agent trace." : `No ${datasetFilter} investigations — try All.`} /> : (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col min-h-[320px]">
-            <div className="p-3 border-b border-slate-200 text-xs font-mono text-slate-500 shrink-0">{runs.length} runs</div>
+            <div className="p-3 border-b border-slate-200 text-xs font-mono text-slate-500 shrink-0">{filteredRuns.length} runs · {datasetFilter==='all' ? 'all 4 datasets' : datasetFilter}</div>
             <div className="divide-y divide-slate-100 flex-1 overflow-auto max-h-[640px] scrollbar-thin">
-              {runs.map((r:any)=>(
+              {filteredRuns.map((r:any)=>(
                 <button key={r.id} onClick={()=>openRun(r)} className={`w-full text-left p-3 hover:bg-slate-50 min-w-0 ${selectedRun?.id===r.id ? 'bg-slate-50 border-l-2 border-l-slate-900':''}`}>
                   <div className="flex items-center justify-between gap-2 min-w-0">
                     <span className="font-mono text-xs font-medium truncate min-w-0 flex-1" title={r.id}>{r.id}</span>

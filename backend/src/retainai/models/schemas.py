@@ -57,6 +57,7 @@ class CustomerSchema(BaseModel):
     health_score: float
     risk_level: str
     is_false_positive_candidate: bool = False
+    metadata_json: Optional[Dict[str, Any]] = None
     created_at: datetime
 
 

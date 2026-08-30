@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getCustomerById, getCustomerTimeline, getCustomerRisk, runInvestigation, approveIntervention, rejectIntervention, getCustomerSignals, getCustomerMemory, getCustomerInterventions, getAgentRuns, ingestEvent, recordOutcome } from '../services/api';
 import { RiskBadge, HealthRing, ConfidenceBadge } from './RiskBadge';
 import { Card, SectionHeader, Skeleton, ErrorState, EmptyState, EvidenceDrawer } from './ui';
-import { Building, Mail, Activity, Bot, FileText, ListOrdered, CheckCircle2, Clock, TrendingDown, ShieldAlert, Zap, ArrowRight, Sparkles, BarChart3, AlertCircle, Check, ChevronRight } from 'lucide-react';
+import { Building, Mail, Activity, Bot, FileText, ListOrdered, CheckCircle2, Clock, TrendingDown, ShieldAlert, Zap, ArrowRight, Sparkles, BarChart3, AlertCircle, Check, ChevronRight, Upload, Database, MessageCircle } from 'lucide-react';
+import { TelemetryUpload } from './TelemetryUpload';
 
 export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
   const [customer,setCustomer]=useState<any>(null);
@@ -195,6 +196,14 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
               <span>·</span><span className="text-emerald-700 font-semibold whitespace-nowrap shrink-0">${Math.round(Number(customer.arr)||0).toLocaleString('en-US')} ARR</span>
             </div>
             <div className="text-xs text-slate-500 mt-1 leading-relaxed truncate" title={`Renewal ${customer.renewal_date} · Lifecycle ${customer.lifecycle_stage} · CSM ${customer.csm_name}`}>Renewal {customer.renewal_date} · Lifecycle {customer.lifecycle_stage} · CSM {customer.csm_name}</div>
+            {customer.metadata_json && typeof customer.metadata_json==='object' && Object.keys(customer.metadata_json).length>0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {Object.entries(customer.metadata_json as any).slice(0,4).map(([k,v]:any)=>(
+                  <span key={k} className="text-[11px] bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full font-mono">{k}: {String(v).slice(0,20)}</span>
+                ))}
+                {Object.keys(customer.metadata_json as any).length>4 && <span className="text-[11px] text-slate-400">+{Object.keys(customer.metadata_json as any).length-4} extra</span>}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -229,6 +238,25 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
           </button>
         </div>
         <div className="text-xs text-slate-500 mt-2 leading-relaxed">Each click <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">POST /events</code> → <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">SystemEventLog</code> → <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">reassess_customer_risk</code> → timeline & signals update. Then <b>Run investigation</b> to see agent working (tools → report).</div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center"><Upload className="w-4 h-4"/></div>
+            <div>
+              <div className="text-sm font-semibold">Upload Telemetry CSV for {customer.name}</div>
+              <div className="text-xs text-slate-500">Any dataset shape — orders, visits, tickets, reviews. Extra columns preserved as metadata & visible in timeline.</div>
+            </div>
+          </div>
+          <button onClick={async()=>{ const [riskData, tl, sigs]=await Promise.all([getCustomerRisk(customerId).catch(()=>null), getCustomerTimeline(customerId,60).catch(()=>[]), getCustomerSignals(customerId).catch(()=>[])]); setRisk(riskData); setTimeline(tl); setSignals(Array.isArray(sigs)?sigs:[]); setSuccess('Refreshed — timeline & signals updated'); setTimeout(()=>setSuccess(null),2000);}} className="text-xs border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"><Database className="w-3 h-3"/> Refresh 360</button>
+        </div>
+        <TelemetryUpload customerId={customerId} defaultEventType="AUTO" onSuccess={async()=>{
+          const [riskData, tl, sigs]=await Promise.all([getCustomerRisk(customerId).catch(()=>null), getCustomerTimeline(customerId,60).catch(()=>[]), getCustomerSignals(customerId).catch(()=>[])]);
+          setRisk(riskData); setTimeline(tl); setSignals(Array.isArray(sigs)?sigs:[]);
+          setSuccess('Telemetry CSV uploaded — health/risk reassessed → now click Run investigation');
+          setTimeout(()=>setSuccess(null),3000);
+        }}/>
       </Card>
 
       <Card>
@@ -452,17 +480,42 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
           }/>
           {filteredTimeline.length===0 ? <EmptyState title="No timeline events" description="No telemetry in the selected window." /> : (
             <div className="space-y-2 max-h-[520px] overflow-auto pr-1 scrollbar-thin">
-              {filteredTimeline.map((e:any)=>(
-                <div key={e.id} className="border border-slate-200 rounded-lg p-3 bg-white">
+              {filteredTimeline.map((e:any)=>{
+                const details = e.details || {};
+                const extraEntries = Object.entries(details).filter(([k]:any)=> k.startsWith('extra_') || k==='_raw_extra');
+                const coreEntries = Object.entries(details).filter(([k]:any)=> !k.startsWith('extra_') && k!=='_raw_extra');
+                const hasExtra = extraEntries.length>0;
+                return (
+                <div key={e.id} className="border border-slate-200 rounded-lg p-3 bg-white hover:border-slate-300 transition">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-mono text-slate-500">{new Date(e.timestamp).toLocaleString()}</span>
-                    <span className="text-[11px] border border-slate-200 bg-slate-50 px-2 py-0.5 rounded-full font-mono uppercase">{e.source || e.type || e.event_type || 'EVENT'}</span>
+                    <span className={`text-[11px] border px-2 py-0.5 rounded-full font-mono uppercase ${e.source==='USAGE'?'bg-amber-50 border-amber-200 text-amber-700': e.source==='SUPPORT_TICKET'?'bg-red-50 border-red-200 text-red-700': e.source==='FEEDBACK'?'bg-violet-50 border-violet-200 text-violet-700':'bg-slate-50 border-slate-200'}`}>{e.source || e.type || e.event_type || 'EVENT'}</span>
                   </div>
                   <div className="text-sm font-medium mt-1">{e.title}</div>
                   {e.description && <div className="text-xs text-slate-600 mt-0.5 line-clamp-2">{e.description}</div>}
-                  {e.details && <div className="text-[11px] text-slate-500 mt-1 truncate">{JSON.stringify(e.details).slice(0,120)}</div>}
+                  {coreEntries.length>0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {coreEntries.slice(0,4).map(([k,v]:any)=> (
+                        <span key={k} className="text-[11px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">{k}: {typeof v==='object'? JSON.stringify(v).slice(0,30): String(v).slice(0,40)}</span>
+                      ))}
+                      {coreEntries.length>4 && <span className="text-[11px] text-slate-400">+{coreEntries.length-4} more</span>}
+                    </div>
+                  )}
+                  {hasExtra && (
+                    <div className="mt-2 bg-amber-50/50 border border-amber-200 rounded-lg p-2">
+                      <div className="text-[11px] font-semibold text-amber-800">Dynamic extra fields (from CSV)</div>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {extraEntries.filter(([k]:any)=>k!=='_raw_extra').slice(0,6).map(([k,v]:any)=>(
+                          <span key={k} className="text-[11px] bg-white border border-amber-200 px-1.5 py-0.5 rounded font-mono">{k.replace('extra_','')}: {String(v).slice(0,30)}</span>
+                        ))}
+                      </div>
+                      {details._raw_extra && <div className="text-[10px] text-slate-500 mt-1 font-mono truncate">{JSON.stringify(details._raw_extra).slice(0,120)}</div>}
+                    </div>
+                  )}
+                  {!hasExtra && e.details && coreEntries.length===0 && <div className="text-[11px] text-slate-400 mt-1 truncate font-mono">{JSON.stringify(e.details).slice(0,120)}</div>}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
@@ -517,6 +570,46 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
           </Card>
         </div>
       </div>
+
+      {/* Inline CTA for parallel chat */}
+      <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#0F172A] flex items-center justify-center shrink-0"><MessageCircle className="w-4 h-4 text-white"/></div>
+            <div>
+              <div className="text-sm font-semibold flex items-center gap-2">Chat with 5 parallel agents <span className="text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-mono">NEW</span></div>
+              <div className="text-xs text-slate-600 leading-relaxed mt-0.5">Ask anything about <b>{customer.name}</b> — Usage, Support, Sentiment, Memory, Risk analysts run in parallel, then stream the grounded answer. Evidence IDs cited.</div>
+              <div className="text-[11px] font-mono text-slate-500 mt-1">Powered by Groq LPU · tenant-isolated · SSE streaming</div>
+            </div>
+          </div>
+          <button
+            onClick={()=>{
+              const el=document.querySelector('[aria-label="Chat"]') as HTMLElement;
+              if(el){ el.classList.add('ring-2','ring-emerald-400','ring-offset-2'); setTimeout(()=>el.classList.remove('ring-2','ring-emerald-400','ring-offset-2'), 1200); el.click(); }
+              // Also store hint
+              try{ localStorage.setItem('retainai_chat_hint','1'); }catch{}
+            }}
+            className="shrink-0 inline-flex items-center gap-1.5 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800"
+          >
+            Open Chat <ArrowRight className="w-3.5 h-3.5"/>
+          </button>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {[
+            `Why is ${customer.name} at risk?`,
+            `Summarize tickets for ${customer.name}`,
+            `What action should I take?`,
+          ].map(q=>(
+            <button key={q} onClick={()=>{
+              const el=document.querySelector('[aria-label="Chat"]') as HTMLElement;
+              if(el) el.click();
+              setTimeout(()=>{ const ta=document.querySelector('textarea[placeholder*=\"Ask about\"]') as HTMLTextAreaElement; if(ta){ ta.value=q; ta.dispatchEvent(new Event('input', {bubbles:true})); ta.focus(); } }, 300);
+            }} className="text-xs border border-slate-200 bg-white px-2.5 py-1.5 rounded-full hover:bg-slate-50">
+              {q}
+            </button>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 };

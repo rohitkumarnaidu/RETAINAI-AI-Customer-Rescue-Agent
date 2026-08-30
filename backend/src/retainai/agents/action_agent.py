@@ -54,45 +54,122 @@ class ActionStrategyAgent:
         import re
         ticket_match = re.search(r"(TICK[-\s]?\w+|tck_\w+|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4})", root_cause + " " + investigation_summary, re.I)
         primary_ticket_ref = ticket_match.group(1) if ticket_match else "reported support ticket"
-
-        # LIVE BRANCH (hybrid-live-dynamic): fallback_data is last-resort only — used only when live LLM call fails (HTTP non-200 / exception / parse failure). No mock fallback for successful path.
-        fallback_steps = [
-            {
-                "step": 1,
-                "title": "Engineering Escalation",
+        rc_lower = (root_cause + " " + investigation_summary).lower()
+        has_support = any(k in rc_lower for k in ["ticket","support","bug","escalation","unresolved","severity","critical"])
+        has_usage = any(k in rc_lower for k in ["usage","dau","active","adoption","engagement","decline","drop"," inactive"])
+        has_sentiment = any(k in rc_lower for k in ["sentiment","feedback","nps","csat","negative","dissatisfact"])
+        has_activity = any(k in rc_lower for k in ["admin","activity","login","session"])
+        # Build dynamic fallback steps based on root cause signals
+        fallback_steps = []
+        step_n = 1
+        if has_support and primary_ticket_ref != "reported support ticket":
+            fallback_steps.append({
+                "step": step_n,
+                "title": "Support Escalation",
                 "owner": "Engineering Lead",
-                "action": f"Escalate {primary_ticket_ref} to Sprint Priority 1 patch release.",
+                "action": f"Escalate {primary_ticket_ref} to Priority 1 and dispatch fix — root cause cites {root_cause[:80]}.",
                 "target_date": "Within 48 hours",
-            },
-            {
-                "step": 2,
-                "title": "CSM Executive Outreach",
+            })
+            step_n+=1
+        elif has_support:
+            fallback_steps.append({
+                "step": step_n,
+                "title": "Support Review",
+                "owner": "Support Lead",
+                "action": f"Review open tickets and unblock friction cited: {root_cause[:90]}",
+                "target_date": "Within 48 hours",
+            })
+            step_n+=1
+        if has_sentiment or has_activity:
+            fallback_steps.append({
+                "step": step_n,
+                "title": "Executive Outreach",
                 "owner": csm_name,
-                "action": "Schedule 15-minute sync with VP of Operations to review export patch and report delivery.",
-                "target_date": "Day 3",
-            },
-            {
-                "step": 3,
-                "title": "Product Onboarding Sync",
+                "action": f"Schedule 15-min exec sync to address sentiment/activity gap — {root_cause[:80]}.",
+                "target_date": f"Day {step_n+1}",
+            })
+            step_n+=1
+        else:
+            fallback_steps.append({
+                "step": step_n,
+                "title": "CSM Check-in",
+                "owner": csm_name,
+                "action": f"Proactive outreach to align on value realization — {root_cause[:80]}.",
+                "target_date": f"Day {step_n+1}",
+            })
+            step_n+=1
+        if has_usage:
+            fallback_steps.append({
+                "step": step_n,
+                "title": "Adoption / Re-engagement Sync",
                 "owner": "Head of Product",
-                "action": "Conduct 1-on-1 technical walkthrough for large dataset exports.",
-                "target_date": "Day 7",
-            },
-        ]
-
+                "action": f"1-on-1 walkthrough to recover usage decline ({root_cause[:70]}) and unblock workflows.",
+                "target_date": f"Day {step_n+3}",
+            })
+        else:
+            # Generic third step if not usage
+            fallback_steps.append({
+                "step": step_n,
+                "title": "Value Realization Review",
+                "owner": "Customer Success",
+                "action": f"Review success plan & health metrics for {customer_name} — {investigation_summary[:70]}.",
+                "target_date": f"Day {step_n+3}",
+            })
+        # Ensure 3 steps
+        while len(fallback_steps)<3:
+            fallback_steps.append({
+                "step": len(fallback_steps)+1,
+                "title": "Follow-up & Measure",
+                "owner": csm_name,
+                "action": f"Track outcome and measure health delta for {customer_name}.",
+                "target_date": "Day 7-14",
+            })
+        # Dynamic email
+        email_subject = f"Support + Success Sync — {customer_name} · {root_cause[:45]}"
+        if has_support:
+            email_body = f"Hi team,\n\nI wanted to personally reach out regarding {primary_ticket_ref}. We've prioritized this per our investigation: {root_cause[:120]}.\n\nCould we schedule a brief 10-min sync this week to confirm the fix and next steps?\n\nBest regards,\n{csm_name}\nCustomer Success Lead"
+        elif has_sentiment:
+            email_body = f"Hi team,\n\nNoticed some feedback friction — {root_cause[:120]}. I'd love to sync to ensure you're getting full value from {customer_name}.\n\nAre you free for 15 mins this week?\n\nBest regards,\n{csm_name}"
+        else:
+            email_body = f"Hi team,\n\nOur health monitoring flagged: {root_cause[:120]}. Let's connect to get {customer_name} back on track.\n\nBest regards,\n{csm_name}"
         fallback_email = {
-            "recipient_role": "Platform Administrator / Executive Lead",
-            "subject": f"Priority Fix & Technical Sync — {customer_name} Account Support",
-            "body": f"Hi team,\n\nI wanted to personally reach out regarding the issue reported under {primary_ticket_ref}. Our engineering team has escalated this to Sprint Priority 1 and dispatched a patch.\n\nCould we schedule a brief 10-minute sync this week to confirm the fix meets your month-end reporting needs?\n\nBest regards,\n{csm_name}\nCustomer Success Lead",
+            "recipient_role": "Customer Stakeholder",
+            "subject": email_subject[:120],
+            "body": email_body,
         }
-
+        # Dynamic title/action_type
+        if has_support and has_usage:
+            action_type = "SUPPORT_ESCALATION_AND_ADOPTION_SYNC"
+            title = f"Support Escalation + Adoption Recovery for {customer_name}"
+            desc = f"Address compound risk: {root_cause[:100]}"
+            objective = f"Resolve friction and recover usage for {customer_name} before renewal."
+        elif has_support:
+            action_type = "SUPPORT_ESCALATION_AND_EXECUTIVE_CHECKIN"
+            title = f"Support Escalation & Executive Check-in for {customer_name}"
+            desc = f"Escalate friction: {root_cause[:100]}"
+            objective = f"Restore trust and unblock {customer_name} workflows."
+        elif has_sentiment:
+            action_type = "EXECUTIVE_OUTREACH_AND_VALUE_REVIEW"
+            title = f"Executive Outreach & Value Review for {customer_name}"
+            desc = f"Address sentiment gap: {root_cause[:100]}"
+            objective = f"Recover satisfaction and engagement for {customer_name}."
+        elif has_usage:
+            action_type = "ADOPTION_RECOVERY_AND_TRAINING"
+            title = f"Adoption Recovery for {customer_name}"
+            desc = f"Recover usage decline: {root_cause[:100]}"
+            objective = f"Re-engage and drive adoption for {customer_name}."
+        else:
+            action_type = "PROACTIVE_CHECKIN_AND_MONITORING"
+            title = f"Proactive Success Check-in for {customer_name}"
+            desc = f"Proactive risk review: {root_cause[:100]}"
+            objective = f"Mitigate emerging risk for {customer_name}."
         # LIVE BRANCH: this fallback is last-resort only — passed to LLMClient.generate_structured_json fallback_data; live call is attempted first
         fallback = RetentionPlanOutputSchema(
-            action_type="ENGINEERING_ESCALATION_AND_EXECUTIVE_CHECKIN",
-            title=f"Emergency Export Bug Patch & Executive Check-in for {customer_name}",
-            description="Escalate report export bug to Sprint 1, schedule technical check-in, and conduct product walkthrough.",
-            objective="Restore product trust, resolve critical support friction, and recover DAU metrics before renewal.",
-            priority="CRITICAL",
+            action_type=action_type,
+            title=title,
+            description=desc,
+            objective=objective,
+            priority="CRITICAL" if has_support and has_usage else ("HIGH" if (has_support or has_usage) else "MEDIUM"),
             plan_steps=fallback_steps,
             draft_email=fallback_email,
             matched_memory_ids=memory_ids,

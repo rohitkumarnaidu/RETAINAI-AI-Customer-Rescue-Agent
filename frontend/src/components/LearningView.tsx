@@ -8,6 +8,7 @@ export const LearningView: React.FC = ()=>{
   const [overview,setOverview]=useState<any>(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState<string|null>(null);
+  const [datasetFilter, setDatasetFilter] = useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
 
   const load=async()=>{
     try{
@@ -21,15 +22,30 @@ export const LearningView: React.FC = ()=>{
   if(loading) return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[1,2,3,4].map(i=><SkeletonCard key={i}/>)}</div>;
   if(error) return <ErrorState message={error} onRetry={load}/>;
 
-  const candidates = overview?.candidates || [];
-  const validated = overview?.validated_memories || mems;
+  const candidatesAll = overview?.candidates || [];
+  const validatedAll = overview?.validated_memories || mems;
+  const filterByDataset = (arr:any[])=> datasetFilter==='all' ? arr : arr.filter((m:any)=>{
+    const txt = `${m.pattern||''} ${m.context_pattern||''} ${m.risk_pattern||''} ${m.recommended_strategy||''} ${m.signals?.join(' ')||''}`.toLowerCase();
+    if(datasetFilter==='customers') return true;
+    if(datasetFilter==='usage') return txt.includes('usage') || txt.includes('dau') || txt.includes('active') || txt.includes('decline');
+    if(datasetFilter==='support') return txt.includes('ticket') || txt.includes('support') || txt.includes('bug');
+    if(datasetFilter==='feedback') return txt.includes('feedback') || txt.includes('sentiment') || txt.includes('csat') || txt.includes('nps');
+    return true;
+  });
+  const candidates = filterByDataset(candidatesAll);
+  const validated = filterByDataset(validatedAll);
 
   return (
     <div className="space-y-4">
       <Card>
         <h2 className="text-lg font-semibold flex items-center gap-2"><GraduationCap className="w-5 h-5"/> Learning Center</h2>
         <p className="text-sm text-slate-600 mt-1">Experience memory — validated patterns that influence future recommendations. Never implies model retraining.</p>
-        <p className="text-xs text-slate-500 mt-1">{validated.length} validated memories · {candidates.length} candidates awaiting validation · Success rates are observed, not guaranteed</p>
+        <p className="text-xs text-slate-500 mt-1">{validatedAll.length} validated · {candidatesAll.length} candidates · Showing {validated.length} + {candidates.length} for <b>{datasetFilter==='all' ? 'All 4 datasets' : datasetFilter}</b></p>
+        <div className="flex flex-wrap gap-1.5 mt-3">
+          {(['all','customers','usage','support','feedback'] as const).map(f=>(
+            <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f==='all' ? 'All 4' : f}</button>
+          ))}
+        </div>
       </Card>
 
       {validated.length===0 && candidates.length===0 ? <EmptyState title="No learning yet" description="RETAINAI hasn't accumulated enough validated experience. Record interventions and measure outcomes to build organizational intelligence." icon={Beaker}/> : (

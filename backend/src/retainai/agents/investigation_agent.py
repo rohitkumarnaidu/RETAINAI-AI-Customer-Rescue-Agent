@@ -83,8 +83,9 @@ class InvestigationAgent:
             )
             return fallback
 
-        # Construct deterministic fallback payload — dynamic evidence grounding
-        # LIVE BRANCH (hybrid-live-dynamic): fallback_data is last-resort only — used only when live LLM call fails (HTTP non-200 / exception / parse failure). No mock fallback for successful path.
+        # Construct deterministic fallback payload — dynamic evidence grounding (generic/domain-agnostic)
+        # LIVE BRANCH (hybrid-live-dynamic): fallback_data is last-resort only — used only when live LLM call fails
+        # Build dynamic parts from actual signals + evidence, not hard-coded export bug
         open_tickets = [t for t in support_tickets if t.get("status") in ("OPEN", "IN_PROGRESS")]
         if open_tickets:
             primary_ticket = open_tickets[0]
@@ -100,10 +101,52 @@ class InvestigationAgent:
             feedback_str = f"Feedback '{feedback_comments[0][:80]}'"
         else:
             feedback_str = "No negative feedback"
-
-        fallback_summary = f"{customer_name} health dropped to {health_score:.1f} ({risk_level}) driven by {len(signals)} detected warning signals."
-        fallback_root_cause = f"Feature export friction in {ticket_str} caused negative sentiment in {feedback_str}, leading to a drop in active usage."
-        fallback_action = f"Escalate ticket {fallback_ticket_ref} to Sprint Priority 1 and arrange technical onboarding sync with Head of Product."
+        # Dynamic signal phrase
+        signal_types = [s.get("signal_type","") for s in signals]
+        has_usage = any(s.get("category")=="USAGE" or "USAGE" in s.get("signal_type","") for s in signals)
+        has_support = any(s.get("category")=="SUPPORT" for s in signals)
+        has_feedback = any(s.get("category")=="FEEDBACK" for s in signals)
+        has_activity = any(s.get("category")=="ACTIVITY" for s in signals)
+        parts = []
+        if has_usage:
+            # Find usage signal summary
+            usage_sig = next((s for s in signals if s.get("category")=="USAGE"), None)
+            if usage_sig and usage_sig.get("summary"):
+                parts.append(usage_sig["summary"].split(".")[0])
+            else:
+                parts.append("significant drop in active usage/engagement")
+        if has_support and open_tickets:
+            parts.append(f"unresolved support friction in {ticket_str}")
+        elif has_support:
+            parts.append("support friction / ticket volume spike")
+        if has_feedback and feedback_comments and feedback_comments[0]:
+            parts.append(f"negative sentiment in {feedback_str}")
+        elif has_feedback:
+            parts.append("negative customer sentiment")
+        if has_activity:
+            parts.append("admin/engagement inactivity (14d)")
+        if not parts:
+            parts = [f"{len(signals)} warning signals" if signals else "anomaly in telemetry"]
+            if ticket_str!="No open tickets":
+                parts.append(ticket_str)
+            if feedback_str!="No negative feedback":
+                parts.append(feedback_str)
+        fallback_summary = f"{customer_name} health dropped to {health_score:.1f} ({risk_level}) driven by {len(signals)} detected warning signals: {', '.join([s.get('signal_type','') for s in signals][:3]) or 'composite risk'}."
+        if len(parts)==1:
+            fallback_root_cause = f"{parts[0].capitalize()} detected — requires targeted intervention."
+        elif len(parts)==2:
+            fallback_root_cause = f"{parts[0].capitalize()} combined with {parts[1]} is driving churn risk."
+        else:
+            fallback_root_cause = f"Compound risk: {parts[0]} + {parts[1]} + {parts[2] if len(parts)>2 else ''}".strip(" +") + "."
+        # Action summary generic but specific
+        if has_support and fallback_ticket_ref!="N/A":
+            fallback_action = f"Escalate {fallback_ticket_ref} to Priority 1, schedule executive check-in, and address {parts[0] if parts else 'root friction'}."
+        elif has_feedback:
+            fallback_action = f"Schedule proactive outreach to address sentiment gap and review {parts[0] if parts else 'value realization'}."
+        elif has_usage:
+            fallback_action = f"Launch adoption/re-engagement play: usage recovery sync and value review for {customer_name}."
+        else:
+            fallback_action = f"Schedule CSM check-in to investigate {' + '.join(signal_types[:2]) if signal_types else 'risk signals'}."
 
         # LIVE BRANCH: this fallback is last-resort only — passed to LLMClient.generate_structured_json fallback_data; live call is attempted first
         fallback = InvestigationOutputSchema(

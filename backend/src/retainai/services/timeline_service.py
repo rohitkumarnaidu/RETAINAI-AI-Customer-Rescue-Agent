@@ -20,18 +20,27 @@ class TimelineService:
         # 1. Usage Events
         usage = await self.telemetry_repo.get_usage_events(customer_id, days=days)
         for u in usage:
+            details = {
+                "daily_active_users": u.daily_active_users,
+                "license_utilization": u.license_utilization,
+                "feature_clicks": u.feature_clicks,
+                "sessions": u.sessions,
+                "wau": u.wau,
+                "mau": u.mau,
+            }
+            # Include dynamic extra fields from metadata_json / feature_adoption_rates
+            extra = getattr(u, 'metadata_json', None) or getattr(u, 'feature_adoption_rates', None)
+            if isinstance(extra, dict) and extra:
+                details.update({"extra_"+k: v for k,v in extra.items() if k not in details})
+                details["_raw_extra"] = extra
             timeline_items.append(
                 {
                     "id": u.id,
                     "timestamp": u.timestamp.isoformat(),
                     "source": "USAGE",
                     "event_type": u.event_type,
-                    "title": f"DAU: {u.daily_active_users} (License Util: {u.license_utilization * 100:.0f}%)",
-                    "details": {
-                        "daily_active_users": u.daily_active_users,
-                        "license_utilization": u.license_utilization,
-                        "feature_clicks": u.feature_clicks,
-                    },
+                    "title": f"DAU: {u.daily_active_users} (License Util: {u.license_utilization * 100:.0f}%)" + (f" · {len(extra)} extra" if isinstance(extra, dict) and extra else ""),
+                    "details": details,
                     "severity": "NORMAL" if u.daily_active_users > 50 else "WARNING",
                 }
             )
@@ -39,20 +48,25 @@ class TimelineService:
         # 2. Support Tickets
         tickets = await self.telemetry_repo.get_support_tickets(customer_id, days=days)
         for t in tickets:
+            details = {
+                "status": t.status,
+                "severity": t.severity,
+                "category": t.category,
+                "csat": t.csat,
+                "description": t.description,
+            }
+            extra = getattr(t, 'metadata_json', None)
+            if isinstance(extra, dict) and extra:
+                details.update({"extra_"+k: v for k,v in extra.items() if k not in details})
+                details["_raw_extra"] = extra
             timeline_items.append(
                 {
                     "id": t.id,
                     "timestamp": t.created_at.isoformat(),
                     "source": "SUPPORT_TICKET",
                     "event_type": f"TICKET_{t.status}",
-                    "title": f"[{t.severity}] Support Ticket: {t.subject}",
-                    "details": {
-                        "status": t.status,
-                        "severity": t.severity,
-                        "category": t.category,
-                        "csat": t.csat,
-                        "description": t.description,
-                    },
+                    "title": f"[{t.severity}] Support Ticket: {t.subject}" + (f" · +{len(extra)} fields" if isinstance(extra, dict) and extra else ""),
+                    "details": details,
                     "severity": "CRITICAL" if t.severity in ("HIGH", "CRITICAL", "URGENT") else "INFO",
                 }
             )
@@ -60,18 +74,25 @@ class TimelineService:
         # 3. Customer Feedback
         feedback = await self.telemetry_repo.get_feedback_entries(customer_id, days=days)
         for f in feedback:
+            details = {
+                "score": f.score,
+                "sentiment": f.sentiment,
+                "text": f.text,
+                "sentiment_score": f.sentiment_score,
+                "category": f.category,
+            }
+            extra = getattr(f, 'metadata_json', None)
+            if isinstance(extra, dict) and extra:
+                details.update({"extra_"+k: v for k,v in extra.items() if k not in details})
+                details["_raw_extra"] = extra
             timeline_items.append(
                 {
                     "id": f.id,
                     "timestamp": f.created_at.isoformat(),
                     "source": "FEEDBACK",
                     "event_type": f"FEEDBACK_{f.sentiment}",
-                    "title": f"{f.source} ({f.sentiment}): {f.text[:60]}...",
-                    "details": {
-                        "score": f.score,
-                        "sentiment": f.sentiment,
-                        "text": f.text,
-                    },
+                    "title": f"{f.source} ({f.sentiment}): {f.text[:60]}..." + (f" · +{len(extra)} fields" if isinstance(extra, dict) and extra else ""),
+                    "details": details,
                     "severity": "WARNING" if f.sentiment == "NEGATIVE" else "INFO",
                 }
             )

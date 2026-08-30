@@ -61,6 +61,7 @@ export const AnalyticsView: React.FC = () => {
   const [obs, setObs] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [datasetFilter, setDatasetFilter] = useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
 
   const load = async () => {
     try {
@@ -80,9 +81,16 @@ export const AnalyticsView: React.FC = () => {
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   const metrics = portfolio?.metrics || {};
-  const customers: any[] = portfolio?.customers || [];
-  const riskDist: Record<string, number> = metrics.risk_distribution || {};
-  const total = metrics.total_customers || customers.length || 0;
+  const customersAll: any[] = portfolio?.customers || [];
+  const customers = datasetFilter==='all' ? customersAll : customersAll.filter((c:any)=>{
+    if(datasetFilter==='customers') return true;
+    if(datasetFilter==='usage') return (c.health_score ?? 100) < 75;
+    if(datasetFilter==='support') return ['AT_RISK','HIGH_RISK','CRITICAL'].includes(c.risk_level);
+    if(datasetFilter==='feedback') return (c.health_score ?? 100) >= 40 && (c.health_score ?? 100) <= 85;
+    return true;
+  });
+  const riskDist: Record<string, number> = datasetFilter==='all' ? (metrics.risk_distribution || {}) : customers.reduce((acc:any,c:any)=>{ const k=c.risk_level||'HEALTHY'; acc[k]=(acc[k]||0)+1; return acc; },{} as Record<string,number>);
+  const total = datasetFilter==='all' ? (metrics.total_customers || customers.length || 0) : customers.length;
   const atRisk = (riskDist['AT_RISK'] || 0) + (riskDist['HIGH_RISK'] || 0) + (riskDist['CRITICAL'] || 0);
   const totalArr = customers.reduce((s: number, c: any) => s + (c.arr || 0), 0);
   const atRiskArr = customers.filter((c: any) => ['AT_RISK', 'HIGH_RISK', 'CRITICAL'].includes(c.risk_level)).reduce((s: number, c: any) => s + (c.arr || 0), 0);
@@ -122,7 +130,13 @@ export const AnalyticsView: React.FC = () => {
         <div className="flex items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="w-5 h-5" /> Analytics — visuals</h2>
-            <p className="text-sm text-slate-600 mt-1">Live portfolio visuals, not mock. All from <code className="bg-slate-100 px-1 rounded">GET /portfolio</code> + <code className="bg-slate-100 px-1 rounded">/metrics/observability</code> per tenant.</p>
+            <p className="text-sm text-slate-600 mt-1">Live portfolio visuals, not mock. All from <code className="bg-slate-100 px-1 rounded">GET /portfolio</code> + <code className="bg-slate-100 px-1 rounded">/metrics/observability</code> per tenant. Filter by dataset:</p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {(['all','customers','usage','support','feedback'] as const).map(f=>(
+                <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-3 py-1 rounded-full text-xs font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{f==='all' ? 'All 4' : f}</button>
+              ))}
+              <span className="text-xs text-slate-500 self-center ml-1">{datasetFilter==='all' ? 'all datasets' : datasetFilter} · {customers.length} accounts</span>
+            </div>
           </div>
           <button onClick={load} className="text-xs border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50">Refresh</button>
         </div>

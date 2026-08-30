@@ -164,14 +164,22 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
     // So always remap when showMapping is true, to be explicit
     if (!showMapping && !needsRemap) return null;
 
-    // Build new header line as retain field names that are mapped
-    const newHeaders = mappedFields;
+    // Build new header line as retain field names that are mapped + any unmapped original headers preserved as extra columns
+    // This ensures arbitrary dataset fields (e.g., churn_score, extra_field) are sent to backend and stored as metadata_json
+    const canonicalMappedSet = new Set(mappedFields.map(f=> columnMapping[f]));
+    const extraHeaders = previewHeaders.filter(h => !canonicalMappedSet.has(h));
+    const newHeaders = [...mappedFields, ...extraHeaders];
     const lines: string[] = [];
     lines.push(newHeaders.map(h=>csvEscape(h)).join(','));
     for (const row of fullRows){
       const vals = newHeaders.map(h=>{
-        const src = columnMapping[h];
-        return csvEscape(row[src] ?? '');
+        if ((mappedFields as string[]).includes(h)) {
+          const src = columnMapping[h as RetainField];
+          return csvEscape(row[src] ?? '');
+        } else {
+          // extra column - use original header value directly
+          return csvEscape(row[h] ?? '');
+        }
       });
       lines.push(vals.join(','));
     }

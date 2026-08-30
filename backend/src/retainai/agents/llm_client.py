@@ -162,3 +162,133 @@ class LLMClient:
         # 3. Fallback on any failure — LIVE BRANCH: last-resort only (HTTP non-200 / exception / parse failure). Logs warning with provider/model.
         logger.warning(f"LLM fallback (last-resort) provider={self.provider} model={self.model} — live call failed (HTTP non-200 / exception / parse failure); returning fallback_data")
         return response_schema.model_validate(fallback_data)
+
+    # ── Chat (free-form) + Streaming + Parallel helpers ───────────────────────
+
+    async def chat(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        fallback_text: str = "I'm currently in offline mode — here's what I can tell you from the cached data.",
+        temperature: float = 0.4,
+        max_tokens: int = 1500,
+    ) -> str:
+        """Free-form chat completion with same provider routing + fallback."""
+        is_mock = self.api_key in ("your_llm_api_key_here", "")
+        if is_mock:
+            logger.info(f"CHAT mock fallback provider={self.provider} model={self.model}")
+            return fallback_text
+
+        try:
+            if self.provider == "gemini":
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": f"{system_prompt}\n\n{user_prompt}"}]}],
+                    "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
+                }
+                async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        return data["candidates"][0]["content"]["parts"][0]["text"]
+                    logger.warning(f"Gemini chat HTTP {resp.status_code}")
+            elif self.provider in ("groq", "groq_api", "gsk"):
+                effective_model = self.model
+                if "llama-3.3" in effective_model.lower() or "llama-3.1" in effective_model.lower():
+                    effective_model = "openai/gpt-oss-120b"
+                elif "gemini" in effective_model.lower() or effective_model.lower() in ("gpt-4o", "gpt-4o-mini"):
+                    effective_model = "openai/gpt-oss-120b"
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": effective_model,
+                    "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+                async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        return data["choices"][0]["message"]["content"]
+                    logger.warning(f"Groq chat HTTP {resp.status_code} body={resp.text[:300]}")
+            elif self.provider in ("openai", "gpt", "gpt-4", "gpt-4o", "o1", "o3"):
+                effective_model = self.model
+                if "gemini" in effective_model.lower() or "llama" in effective_model.lower():
+                    effective_model = "gpt-4o"
+                url = "https://api.openai.com/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": effective_model,
+                    "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                    "temperature": 0.2 if not effective_model.startswith("o1") else 1.0,
+                    "max_tokens": max_tokens,
+                }
+                async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        return data["choices"][0]["message"]["content"]
+                    logger.warning(f"OpenAI chat HTTP {resp.status_code} body={resp.text[:300]}")
+        except Exception as e:
+            logger.error(f"LLM chat failed: {e}")
+        logger.warning(f"LLM chat fallback provider={self.provider} model={self.model}")
+        return fallback_text
+
+    async def chat_stream(self, system_prompt: str, user_prompt: str, temperature: float = 0.4, max_tokens: int = 1500):
+        """Async generator yielding SSE chunks. Falls back to single chunk if streaming unsupported."""
+        # Try groq streaming first
+        is_mock = self.api_key in ("your_llm_api_key_here", "")
+        if is_mock:
+            yield f"[offline] {user_prompt[:120]} — (no LLM key, showing cached context)"
+            return
+        # For non-mock, attempt streaming via Groq/OpenAI SSE, else fallback to chat()
+        streamed = False
+        try:
+            if self.provider in ("groq", "groq_api", "gsk", "openai", "gpt"):
+                is_groq = self.provider in ("groq", "groq_api", "gsk")
+                effective_model = self.model
+                if is_groq and ("llama" in effective_model.lower() or "gemini" in effective_model.lower() or effective_model.lower() in ("gpt-4o",)):
+                    effective_model = "openai/gpt-oss-120b"
+                if not is_groq and ("gemini" in effective_model.lower() or "llama" in effective_model.lower()):
+                    effective_model = "gpt-4o"
+                url = "https://api.groq.com/openai/v1/chat/completions" if is_groq else "https://api.openai.com/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": effective_model,
+                    "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": True,
+                }
+                async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT + 10) as client:
+                    async with client.stream("POST", url, json=payload, headers=headers) as resp:
+                        if resp.status_code == 200:
+                            async for line in resp.aiter_lines():
+                                if not line or not line.startswith("data:"):
+                                    continue
+                                data = line[5:].strip()
+                                if data == "[DONE]":
+                                    break
+                                try:
+                                    j = json.loads(data)
+                                    delta = j["choices"][0].get("delta", {}).get("content") or j["choices"][0].get("message", {}).get("content", "")
+                                    if delta:
+                                        streamed = True
+                                        yield delta
+                                except Exception:
+                                    continue
+                            if streamed:
+                                return
+                # if we reach here streaming didn't yield, fallback below
+        except Exception as e:
+            logger.debug(f"chat_stream SSE failed, fallback to chat(): {e}")
+
+        # Fallback: single chat call chunked by words for SSE effect
+        text = await self.chat(system_prompt, user_prompt, fallback_text="I'm in offline mode — here's the grounded summary from your data.", temperature=temperature, max_tokens=max_tokens)
+        # yield in ~40 char chunks to simulate streaming
+        for i in range(0, len(text), 40):
+            yield text[i:i+40]
+            # tiny async yield
+            import asyncio as _aio
+            await _aio.sleep(0.02)

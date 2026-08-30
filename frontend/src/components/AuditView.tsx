@@ -7,6 +7,7 @@ export const AuditView: React.FC = ()=>{
   const [data,setData]=useState<any>(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState<string|null>(null);
+  const [datasetFilter, setDatasetFilter] = useState<'all'|'customers'|'usage'|'support'|'feedback'>('all');
 
   const load=async()=>{
     try{
@@ -26,10 +27,11 @@ export const AuditView: React.FC = ()=>{
   if(loading) return <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{[1,2].map(i=><SkeletonCard key={i}/>)}</div>;
   if(error) return <ErrorState message={error} onRetry={load}/>;
 
-  const events = [
-    ...(data.inters||[]).slice(0,8).map((i:any)=>({ts:i.created_at, type:'INTERVENTION', title:`${i.status} · ${i.title}`, id:i.id})),
-    ...(data.outcomes||[]).slice(0,8).map((o:any)=>({ts:o.created_at, type:'OUTCOME', title:`${o.status} · Δ ${o.health_delta}`, id:o.id})),
+  const eventsAll = [
+    ...(data.inters||[]).slice(0,8).map((i:any)=>({ts:i.created_at, type:'INTERVENTION', title:`${i.status} · ${i.title}`, id:i.id, dataset: (i.action_type||'').toLowerCase().includes('usage') ? 'usage' : (i.action_type||'').toLowerCase().includes('support') ? 'support' : (i.action_type||'').toLowerCase().includes('feedback') ? 'feedback' : 'customers'})),
+    ...(data.outcomes||[]).slice(0,8).map((o:any)=>({ts:o.created_at, type:'OUTCOME', title:`${o.status} · Δ ${o.health_delta}`, id:o.id, dataset: 'customers'})),
   ].sort((a,b)=> new Date(b.ts).getTime()-new Date(a.ts).getTime()).slice(0,12);
+  const events = datasetFilter==='all' ? eventsAll : eventsAll.filter((e:any)=> e.dataset===datasetFilter || (datasetFilter==='customers' && e.type==='OUTCOME'));
 
   return (
     <div className="space-y-4">
@@ -68,7 +70,15 @@ export const AuditView: React.FC = ()=>{
       </div>
 
       <Card>
-        <h3 className="text-sm font-semibold leading-tight">Recent activity (chronological)</h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold leading-tight">Recent activity (chronological)</h3>
+          <div className="flex flex-wrap gap-1">
+            {(['all','customers','usage','support','feedback'] as const).map(f=>(
+              <button key={f} onClick={()=> setDatasetFilter(f)} className={`px-2 py-1 rounded-full text-[11px] font-mono border capitalize ${datasetFilter===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200'}`}>{f==='all' ? 'All 4' : f}</button>
+            ))}
+          </div>
+        </div>
+        <div className="text-xs text-slate-500 mt-1">{events.length} of {eventsAll.length} · {datasetFilter==='all' ? 'all datasets' : datasetFilter}</div>
         <div className="mt-3 space-y-2 max-h-[520px] overflow-auto pr-1 scrollbar-thin">
           {events.length===0 ? <div className="text-xs text-slate-500">No activity yet — generate an investigation to populate the audit trail.</div> : events.map((e:any)=>(
             <div key={e.id} className="border border-slate-200 rounded-lg p-3 flex items-center justify-between gap-3 bg-white min-w-0">
