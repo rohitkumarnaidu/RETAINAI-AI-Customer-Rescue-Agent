@@ -7,7 +7,7 @@ import { InterventionsView } from './components/InterventionsView';
 import { LearningView } from './components/LearningView';
 import { AuditView } from './components/AuditView';
 import { resetDemo } from './services/api';
-import { LayoutDashboard, Users, UserCircle2, SearchCode, ClipboardList, GraduationCap, ScrollText, Shield, RefreshCw, Menu, X, FlaskConical } from 'lucide-react';
+import { LayoutDashboard, Users, UserCircle2, SearchCode, ClipboardList, GraduationCap, ScrollText, Shield, RefreshCw, Menu, X, FlaskConical, Upload } from 'lucide-react';
 
 type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit';
 
@@ -86,6 +86,9 @@ export function App() {
               <span>Acme Corp · Hero scenario</span>
               <button onClick={()=>handleSelectCustomer('b2a88551-82e5-43d7-b620-ba1640900c71')} className="ml-1 bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700 hover:bg-slate-50">Open</button>
             </div>
+            <button onClick={()=>{ setActiveTab('customers'); window.scrollTo({top:0, behavior:'smooth'}); }} className="hidden sm:inline-flex items-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold">
+              <Upload className="w-3.5 h-3.5" /> Import CSV
+            </button>
             <button onClick={handleResetDemo} disabled={resetting} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50">
               <RefreshCw className={`w-3.5 h-3.5 ${resetting? 'animate-spin':''}`} /> <span className="hidden sm:inline">Reset demo</span>
             </button>

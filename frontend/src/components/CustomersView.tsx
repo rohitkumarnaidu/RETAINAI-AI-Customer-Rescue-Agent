@@ -2,7 +2,8 @@ import React, {useState, useEffect, useMemo} from 'react';
 import { getCustomers } from '../services/api';
 import { RiskBadge, HealthRing } from './RiskBadge';
 import { Card, ErrorState, SkeletonCard } from './ui';
-import { Search, ArrowUpRight, SlidersHorizontal } from 'lucide-react';
+import { CsvUpload } from './CsvUpload';
+import { Search, ArrowUpRight, SlidersHorizontal, Upload, X, RefreshCw } from 'lucide-react';
 
 export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({onSelectCustomer})=>{
   const [customers,setCustomers]=useState<any[]>([]);
@@ -27,6 +28,8 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
   },[customers,q,seg,risk,sort]);
 
   const [page,setPage]=useState(1); const pageSize=20;
+  const [showImport,setShowImport]=useState(false);
+  const [toast,setToast]=useState<string|null>(null);
   const fmtDate=(s:string)=>{ try{ const d=new Date(s); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch{return s}};
   const fmtARR=(n:number)=> n>=1000? `$${(n/1000).toFixed(0)}k` : `$${n.toLocaleString()}`;
   if(loading) return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[1,2,3,4].map(i=><SkeletonCard key={i}/>)}</div>;
@@ -57,8 +60,18 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
             <select value={sort} onChange={e=>setSort(e.target.value as any)} className="border border-slate-200 rounded-lg px-2 py-2 text-sm bg-white">
               <option value="name">Sort: Name</option><option value="health">Sort: Health ↑</option><option value="arr">Sort: ARR ↓</option>
             </select>
+            <button onClick={load} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-slate-50"><RefreshCw className="w-3.5 h-3.5" /> Refresh</button>
+            <button onClick={()=>setShowImport(v=>!v)} className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border ${showImport ? 'bg-slate-900 text-white border-slate-900' : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'}`}>
+              {showImport ? <X className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />} {showImport ? 'Close import' : 'Import CSV / Add customer'}
+            </button>
           </div>
         </div>
+        {showImport && (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            {toast && <div className="mb-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-2 rounded-lg">{toast}</div>}
+            <CsvUpload onSuccess={async()=>{ await load(); setToast('Customers added — portfolio updated'); setTimeout(()=>setToast(null),3000); }} onClose={()=>setShowImport(false)} />
+          </div>
+        )}
       </Card>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">

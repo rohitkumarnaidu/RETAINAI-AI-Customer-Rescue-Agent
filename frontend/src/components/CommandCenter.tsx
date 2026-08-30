@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { getPortfolio } from '../services/api';
 import { RiskBadge, HealthRing } from './RiskBadge';
 import { Card, SkeletonCard, ErrorState } from './ui';
-import { ArrowUpRight, TrendingDown, ShieldAlert, Activity, Clock, Search, Filter } from 'lucide-react';
+import { ArrowUpRight, TrendingDown, ShieldAlert, Activity, Clock, Search, Filter, Upload, FileSpreadsheet } from 'lucide-react';
 
 export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({onSelectCustomer})=>{
   const [data, setData] = useState<any>(null);
@@ -53,6 +53,7 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
           <p className="text-sm text-slate-600 mt-1">
             {critical.length} critical · {watch.length} watch · {healthy.length} healthy · {(atRiskARR/1000).toFixed(0)}k ARR at risk · {customers.length} total accounts
           </p>
+          <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5"><FileSpreadsheet className="w-3 h-3" /> Have your own data? Go to <b>Customers</b> → <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium"><Upload className="w-3 h-3" /> Import CSV / Add customer</span> — now supports live data, not just demo 101.</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={()=> acme && onSelectCustomer(acme.id)} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800">
