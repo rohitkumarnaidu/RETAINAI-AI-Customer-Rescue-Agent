@@ -254,7 +254,7 @@ export const ChatWidget: React.FC<{ customerId?:string; customerName?:string }> 
                 </div>
                 <div className="grid grid-cols-1 gap-1.5">
                   {suggestions.map(s=>(
-                    <button key={s} onClick={()=>{ setInput(s); setTimeout(()=> inputRef.current?.focus(), 0); }} className="text-left text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-50 hover:border-slate-300 leading-relaxed">
+                    <button key={s} onClick={()=> send(s)} className="text-left text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-50 hover:border-slate-300 leading-relaxed active:bg-slate-100 cursor-pointer">
                       {s}
                     </button>
                   ))}

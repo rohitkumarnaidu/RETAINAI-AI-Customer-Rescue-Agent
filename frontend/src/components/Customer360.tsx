@@ -626,9 +626,9 @@ export const Customer360: React.FC<{customerId:string; onNavigate?: (tab: TabNav
           ].map(q=>(
             <button key={q} onClick={()=>{
               const el=document.querySelector('[aria-label="Chat"]') as HTMLElement;
-              if(el) el.click();
-              setTimeout(()=>{ const ta=document.querySelector('textarea[placeholder*=\"Ask about\"]') as HTMLTextAreaElement; if(ta){ ta.value=q; ta.dispatchEvent(new Event('input', {bubbles:true})); ta.focus(); } }, 300);
-            }} className="text-xs border border-slate-200 bg-white px-2.5 py-1.5 rounded-full hover:bg-slate-50">
+              if(el) { el.classList.add('ring-2','ring-emerald-400'); setTimeout(()=>el.classList.remove('ring-2','ring-emerald-400'),800); el.click(); }
+              try{ window.dispatchEvent(new CustomEvent('retainai-chat-ask', {detail:{q}})); }catch{}
+            }} className="text-xs border border-slate-200 bg-white px-2.5 py-1.5 rounded-full hover:bg-slate-50 active:bg-slate-100 cursor-pointer">
               {q}
             </button>
           ))}
