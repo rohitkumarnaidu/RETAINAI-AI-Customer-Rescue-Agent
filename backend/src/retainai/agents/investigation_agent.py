@@ -24,6 +24,7 @@ RULES:
 2. DO NOT fabricate evidence IDs or invent unsupported facts.
 3. If data sources are sparse (fewer than 2 telemetry categories present), return confidence='INSUFFICIENT_EVIDENCE' and list missing items in missing_evidence.
 4. Keep the root cause concise and actionable (max 2 sentences).
+5. FORMATTING: Return plain text only — do NOT use markdown **bold** or ## headers in summary, root_cause, or recommended_action_summary. Use plain sentences.
 """
 
 def _resolve_system_prompt() -> str:
@@ -171,9 +172,17 @@ class InvestigationAgent:
 
         effective_prompt = system_prompt_override or _resolve_system_prompt()
         client = llm_client or self.client
-        return await client.generate_structured_json(
+        result = await client.generate_structured_json(
             system_prompt=effective_prompt,
             user_prompt=user_prompt,
             response_schema=InvestigationOutputSchema,
             fallback_data=fallback.model_dump(),
         )
+        try:
+            for attr in ("summary", "root_cause", "recommended_action_summary"):
+                v = getattr(result, attr, None)
+                if isinstance(v, str):
+                    setattr(result, attr, v.replace("**", "").replace("__", "").strip())
+        except Exception:
+            pass
+        return result

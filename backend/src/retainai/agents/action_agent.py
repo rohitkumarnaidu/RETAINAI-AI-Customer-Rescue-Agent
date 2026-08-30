@@ -25,6 +25,8 @@ RULES:
 2. Reference validated Experience Memories if matching strategies exist.
 3. Provide step-by-step execution plan items with owner and target timeline.
 4. Provide a professional, empathetic email draft for the CSM to review.
+5. FORMATTING — CRITICAL: draft_email.subject and draft_email.body MUST be plain text only. Do NOT use markdown syntax like **bold**, ## headers, ``` fences, or markdown bullets. Use plain paragraphs, line breaks, and numbered steps like "1. Hot-fix deployment - Expected within 3 business days." Headings should be plain text like "What we've done so far:" not "**What we've done so far**".
+6. Keep email professional, concise, and ready to send without editing symbols.
 """
 
 def _resolve_system_prompt() -> str:
@@ -185,9 +187,31 @@ class ActionStrategyAgent:
 
         effective_prompt = system_prompt_override or _resolve_system_prompt()
         client = llm_client or self.client
-        return await client.generate_structured_json(
+        result = await client.generate_structured_json(
             system_prompt=effective_prompt,
             user_prompt=user_prompt,
             response_schema=RetentionPlanOutputSchema,
             fallback_data=fallback.model_dump(),
         )
+        # Post-process: strip markdown symbols from draft_email so frontend never shows raw ** or ## even if LLM ignores rule
+        try:
+            if result.draft_email and isinstance(result.draft_email, dict):
+                for k in ("subject", "body"):
+                    if k in result.draft_email and isinstance(result.draft_email[k], str):
+                        v = result.draft_email[k]
+                        # Remove bold markers but keep text, clean heading markers
+                        v = v.replace("**", "").replace("__", "")
+                        # Remove leading markdown heading hashes at line starts
+                        import re as _re
+                        v = _re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", v)
+                        # Clean stray markdown list markers that are doubled
+                        result.draft_email[k] = v.strip()
+                # Also clean plan_steps titles/actions
+                if result.plan_steps:
+                    for step in result.plan_steps:
+                        for fk in ("title", "action"):
+                            if fk in step and isinstance(step[fk], str):
+                                step[fk] = step[fk].replace("**", "").replace("__", "").strip()
+        except Exception:
+            pass
+        return result
