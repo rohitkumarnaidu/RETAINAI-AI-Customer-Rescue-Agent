@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+export const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -68,5 +68,21 @@ export const uploadCustomersCsv = async (file: File): Promise<{status:string;cre
 };
 export const getCustomerCsvTemplate = async (): Promise<{headers:string[]; sample_row:string[]; csv_text:string; filename:string; notes:string}> => {
   const r = await api.get('/customers/template/csv');
+  return r.data;
+};
+
+// — Phase 2: Universal Ingestion —
+export const ingestBatch = async (customers: Record<string, unknown>[]): Promise<{created:number;skipped:number;errors:unknown[];tenant_id?:string}> => {
+  const r = await api.post('/ingest/batch', {customers});
+  return r.data;
+};
+export const ingestBatchRaw = ingestBatch;
+export const getWebhookUrl = (provider:string):string => `${API_BASE_URL}/ingest/webhook/${provider}`;
+export const uploadBulkEvents = async (customerId:string, events:{event_type:string;payload:Record<string,unknown>;timestamp?:string}[]): Promise<{processed:number;total:number;errors:unknown[];reassessment?:unknown}> => {
+  const r = await api.post(`/customers/${customerId}/events/bulk`, {events});
+  return r.data;
+};
+export const seedSample = async (): Promise<{status:string;seeded:number;skipped:number;tenant_id:string;message:string}> => {
+  const r = await api.post('/system/seed-sample');
   return r.data;
 };

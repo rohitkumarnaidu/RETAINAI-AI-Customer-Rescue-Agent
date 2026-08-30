@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import { getAllInterventions, getAllOutcomes, approveIntervention, rejectIntervention, recordOutcome } from '../services/api';
+import { getAllInterventions, getAllOutcomes, approveIntervention, rejectIntervention, recordOutcome, getPortfolio } from '../services/api';
 import { Card, ErrorState, EmptyState, SkeletonCard } from './ui';
 import { ClipboardList, CheckCircle2, XCircle, Clock, ArrowRight, BarChart3, AlertCircle } from 'lucide-react';
 
@@ -111,8 +111,8 @@ export const InterventionsView: React.FC = ()=>{
                 ) : <div className="mt-3 text-xs text-slate-500">Outcome not yet measured — {iv.status==='APPROVED' ? 'click Record Outcome below' : 'approve first'}</div>}
                 {iv.status==='PROPOSED' && (
                   <div className="mt-3 flex gap-2">
-                    <button onClick={async()=>{ await approveIntervention(iv.id,'CSM'); load(); }} className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-emerald-500"><CheckCircle2 className="w-3.5 h-3.5"/>Approve</button>
-                    <button onClick={async()=>{ await rejectIntervention(iv.id,'Not a fit','CSM'); load(); }} className="flex-1 inline-flex items-center justify-center gap-1.5 border border-slate-200 bg-white px-3 py-2 rounded-lg text-xs hover:bg-slate-50"><XCircle className="w-3.5 h-3.5"/>Reject</button>
+                    <button onClick={async()=>{ await approveIntervention(iv.id,'CSM'); await getPortfolio().catch(()=>null); await load(); }} className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-emerald-500"><CheckCircle2 className="w-3.5 h-3.5"/>Approve</button>
+                    <button onClick={async()=>{ await rejectIntervention(iv.id,'Not a fit','CSM'); await getPortfolio().catch(()=>null); await load(); }} className="flex-1 inline-flex items-center justify-center gap-1.5 border border-slate-200 bg-white px-3 py-2 rounded-lg text-xs hover:bg-slate-50"><XCircle className="w-3.5 h-3.5"/>Reject</button>
                   </div>
                 )}
                 {iv.status==='APPROVED' && !oc && (

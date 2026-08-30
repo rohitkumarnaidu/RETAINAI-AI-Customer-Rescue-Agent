@@ -247,7 +247,7 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
                 <div className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Primary root cause</div>
                 <div className="text-sm font-semibold text-slate-900 mt-1">{rootCause==="—" ? "—" : rootCause}</div>
                 <div className="text-sm text-slate-600 leading-relaxed mt-1">{reasoning==="—" ? "—" : reasoning}</div>
-                {rootCause==="—" && <div className="text-xs text-slate-500 mt-1">Fallback: no severe risk text suppressed — showing “—” per dynamic honesty rule.</div>}
+                {rootCause==="—" && <div className="text-xs text-slate-500 mt-1">Showing "—" per dynamic honesty rule.</div>}
               </div>
             )}
             {risk?.health_components && (

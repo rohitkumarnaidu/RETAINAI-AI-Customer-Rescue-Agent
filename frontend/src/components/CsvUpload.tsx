@@ -1,15 +1,89 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { uploadCustomersCsv, createCustomer, getCustomerCsvTemplate } from '../services/api';
 import { Card, SectionHeader } from './ui';
-import { Upload, Download, FileSpreadsheet, X, CheckCircle2, AlertTriangle, Plus, Loader2, UserPlus } from 'lucide-react';
+import { Upload, Download, FileSpreadsheet, X, CheckCircle2, AlertTriangle, Plus, Loader2, UserPlus, ArrowRight, RefreshCw } from 'lucide-react';
+
+const RETAIN_FIELDS = ['name','domain','segment','industry','plan','arr','mrr','csm_name','csm_email','health_score','risk_level','renewal_date','status'] as const;
+type RetainField = typeof RETAIN_FIELDS[number];
+
+const FIELD_META: Record<RetainField,{label:string;required?:boolean;hint?:string}> = {
+  name:{label:'name *',required:true,hint:'required'},
+  domain:{label:'domain',hint:'auto slug if blank'},
+  segment:{label:'segment'},
+  industry:{label:'industry'},
+  plan:{label:'plan'},
+  arr:{label:'arr',hint:'numeric'},
+  mrr:{label:'mrr',hint:'numeric'},
+  csm_name:{label:'csm_name'},
+  csm_email:{label:'csm_email'},
+  health_score:{label:'health_score',hint:'0-100'},
+  risk_level:{label:'risk_level',hint:'auto if blank'},
+  renewal_date:{label:'renewal_date',hint:'YYYY-MM-DD'},
+  status:{label:'status'},
+};
+
+const ALIAS_MAP: Record<RetainField,string[]> = {
+  name:['name','company','customer','account','customer_name','client','org','organization'],
+  domain:['domain','website','url','site','company_domain'],
+  segment:['segment','tier','size','customer_segment'],
+  industry:['industry','vertical','sector'],
+  plan:['plan','tier','package'],
+  arr:['arr','revenue','annual_revenue','annualrevenue','annual_arr'],
+  mrr:['mrr','monthly_revenue','monthlyrevenue'],
+  csm_name:['csm_name','csm','owner','account_manager','csmname','manager'],
+  csm_email:['csm_email','csm email','email','owner_email'],
+  health_score:['health_score','health','score','healthscore'],
+  risk_level:['risk_level','risk','risklevel'],
+  renewal_date:['renewal_date','renewal','renew','renewaldate'],
+  status:['status','state'],
+};
+
+function autoMap(headers: string[]): Record<RetainField,string> {
+  const lowerHeaders = headers.map(h=>h.trim());
+  const lowerMap = new Map<string,string>();
+  lowerHeaders.forEach(h=> lowerMap.set(h.toLowerCase(), h));
+  const out: Record<RetainField,string> = {} as Record<RetainField,string>;
+  (RETAIN_FIELDS as readonly string[]).forEach(field=>{
+    const aliases = ALIAS_MAP[field as RetainField] || [field];
+    let found = '';
+    for (const a of aliases){
+      if (lowerMap.has(a)) { found = lowerMap.get(a)!; break; }
+      // also check aliases with underscore variant
+      const underscored = a.replace(/\s+/g,'_');
+      if (lowerMap.has(underscored)) { found = lowerMap.get(underscored)!; break; }
+    }
+    // fallback exact field lower
+    if (!found && lowerMap.has(field.toLowerCase())) found = lowerMap.get(field.toLowerCase())!;
+    // also check case-insensitive header equals field without underscore
+    if (!found){
+      const normField = field.replace('_','').toLowerCase();
+      for (const h of headers){
+        if (h.toLowerCase().replace(/[\s_]+/g,'')===normField){ found=h; break; }
+      }
+    }
+    out[field as RetainField]=found;
+  });
+  return out;
+}
+
+function csvEscape(v:string):string {
+  if (v==null) return '';
+  const s = String(v);
+  if (s.includes('"') || s.includes(',') || s.includes('\n')) return `"${s.replace(/"/g,'""')}"`;
+  return s;
+}
 
 export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void }> = ({ onSuccess, onClose }) => {
   const [dragOver, setDragOver] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [previewRows, setPreviewRows] = useState<Record<string,string>[]>([]);
   const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
+  const [fullRows, setFullRows] = useState<Record<string,string>[]>([]);
+  const [rawText, setRawText] = useState<string>('');
+  const [columnMapping, setColumnMapping] = useState<Record<RetainField,string>>(()=> ({} as Record<RetainField,string>));
+  const [showMapping, setShowMapping] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   // Add single customer form
   const [showAddForm, setShowAddForm] = useState(false);
@@ -21,22 +95,29 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
 
   const handleFile = (f: File) => {
     setFile(f); setResult(null); setError(null);
-    // Client preview: read first 6 rows
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const text = String(e.target?.result || '');
+        setRawText(text);
         const lines = text.split(/\r?\n/).filter(l => l.trim());
         if (lines.length < 1) return;
-        const headers = lines[0].split(',').map(h => h.trim());
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
         setPreviewHeaders(headers);
-        const rows = lines.slice(1, 7).map(line => {
-          const cols = line.split(',');
+        const allRows = lines.slice(1).map(line => {
+          const cols = line.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
           const obj: Record<string,string> = {};
           headers.forEach((h, i) => obj[h] = (cols[i] || '').trim());
           return obj;
-        });
-        setPreviewRows(rows);
+        }).filter(r=> Object.values(r).some(v=>v));
+        setFullRows(allRows);
+        setPreviewRows(allRows.slice(0,7));
+        const mapped = autoMap(headers);
+        setColumnMapping(mapped);
+        // auto-show mapping if not exact name match
+        const hasWeirdHeaders = headers.some(h=> !RETAIN_FIELDS.includes(h.toLowerCase() as RetainField)) || !headers.map(h=>h.toLowerCase()).includes('name');
+        if (hasWeirdHeaders) setShowMapping(true);
+        else setShowMapping(false);
       } catch { /* ignore */ }
     };
     reader.readAsText(f);
@@ -48,15 +129,58 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
     if (f) handleFile(f);
   };
 
+  const buildRemappedFile = (): File | null => {
+    if (!file || !rawText) return null;
+    // Determine if mapping is identity (source header lower == retain field lower)
+    const mappedFields = (RETAIN_FIELDS as readonly string[]).filter(f=> (columnMapping[f as RetainField]||'').trim() !== '') as RetainField[];
+    if (mappedFields.length===0) return null;
+    if (!mappedFields.includes('name')) return null;
+    // Check if any mapping differs from exact lower match
+    let needsRemap = false;
+    for (const f of mappedFields){
+      const src = columnMapping[f];
+      if (src.toLowerCase() !== f.toLowerCase()) needsRemap = true;
+    }
+    // Also if not all headers are mappedFields (i.e., user skipped some columns, we still want to remap to only those fields)
+    // So always remap when showMapping is true, to be explicit
+    if (!showMapping && !needsRemap) return null;
+
+    // Build new header line as retain field names that are mapped
+    const newHeaders = mappedFields;
+    const lines: string[] = [];
+    lines.push(newHeaders.map(h=>csvEscape(h)).join(','));
+    for (const row of fullRows){
+      const vals = newHeaders.map(h=>{
+        const src = columnMapping[h];
+        return csvEscape(row[src] ?? '');
+      });
+      lines.push(vals.join(','));
+    }
+    const newText = lines.join('\n') + '\n';
+    return new File([newText], file.name, {type:'text/csv'});
+  };
+
   const handleUpload = async () => {
     if (!file) return;
     setUploading(true); setError(null); setResult(null);
     try {
-      const res = await uploadCustomersCsv(file);
+      // Validate name mapped
+      if (showMapping){
+        const nameSrc = columnMapping['name'];
+        if (!nameSrc){
+          setError("Column Mapping: 'name' must be mapped — choose which CSV column contains the customer name (e.g., 'company' → name)");
+          setUploading(false);
+          return;
+        }
+      }
+      const remapped = showMapping ? buildRemappedFile() : null;
+      const fileToUpload = remapped || file;
+      const res = await uploadCustomersCsv(fileToUpload);
       setResult(res);
-      if (res.created > 0 && onSuccess) onSuccess();
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || e?.response?.data?.message || e.message || 'Upload failed';
+      if ((res as unknown as {created:number}).created > 0 && onSuccess) onSuccess();
+    } catch (e: unknown) {
+      const err = e as {response?:{data?:{detail?:unknown;message?:unknown}};message?:string};
+      const msg = err?.response?.data?.detail || err?.response?.data?.message || err.message || 'Upload failed';
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally { setUploading(false); }
   };
@@ -71,7 +195,6 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      // fallback client-side
       const headers = 'name,domain,segment,industry,plan,arr,mrr,csm_name,csm_email,health_score,risk_level,renewal_date,status';
       const sample = 'Example Corp,example.com,Enterprise,FinTech,Enterprise Tier,180000,15000,Alex Morgan,alex@retainai.io,42,CRITICAL,2026-09-15,ACTIVE';
       const blob = new Blob([headers + '\n' + sample + '\n'], { type: 'text/csv' });
@@ -87,7 +210,7 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
     e.preventDefault();
     setFormSaving(true); setFormError(null); setFormSuccess(null);
     try {
-      const payload: any = {
+      const payload: Record<string,unknown> = {
         name: formData.name,
         domain: formData.domain || undefined,
         segment: formData.segment,
@@ -104,8 +227,9 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
       setFormSuccess(`Created ${created.name} (${created.id}) — health ${created.health_score} · ${created.risk_level}`);
       setFormData(d => ({ ...d, name: '', domain: '' }));
       if (onSuccess) onSuccess();
-    } catch (e: any) {
-      setFormError(e?.response?.data?.detail || e.message || 'Create failed');
+    } catch (e: unknown) {
+      const err = e as {response?:{data?:{detail?:string}};message?:string};
+      setFormError(err?.response?.data?.detail || err.message || 'Create failed');
     } finally { setFormSaving(false); }
   };
 
@@ -113,6 +237,26 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
     const d = new Date(); d.setDate(d.getDate() + 90);
     return d.toISOString().slice(0, 10);
   }, []);
+
+  const missingName = showMapping && !columnMapping['name'];
+  const remappedPreviewRows = useMemo(()=>{
+    if (!showMapping || previewHeaders.length===0) return previewRows;
+    const fields = (RETAIN_FIELDS as readonly string[]).filter(f=> columnMapping[f as RetainField]);
+    if (fields.length===0) return [];
+    return fullRows.slice(0,5).map(row=>{
+      const obj: Record<string,string> = {};
+      fields.forEach(f=>{
+        const src = columnMapping[f as RetainField];
+        obj[f]= row[src] ?? '';
+      });
+      return obj;
+    });
+  },[showMapping, columnMapping, fullRows, previewRows, previewHeaders.length]);
+
+  const remappedHeaders = useMemo(()=>{
+    if (!showMapping) return previewHeaders;
+    return (RETAIN_FIELDS as readonly string[]).filter(f=> columnMapping[f as RetainField]) as string[];
+  },[showMapping, columnMapping, previewHeaders]);
 
   return (
     <div className="space-y-4">
@@ -204,14 +348,14 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
           <FileSpreadsheet className="w-6 h-6" />
         </div>
         <div className="mt-3 text-sm font-semibold">Drop CSV here or click to browse</div>
-        <div className="text-xs text-slate-500 mt-1">Max 500 rows · 2MB · UTF-8 · Header must include <code className="bg-slate-100 px-1 py-0.5 rounded">name</code></div>
+        <div className="text-xs text-slate-500 mt-1">Max 500 rows · 2MB · UTF-8 · Header must include <code className="bg-slate-100 px-1 py-0.5 rounded">name</code> (or map below)</div>
         <div className="mt-3 flex items-center justify-center gap-2">
           <input ref={inputRef} type="file" accept=".csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
           <button onClick={() => inputRef.current?.click()} className="inline-flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50">
             <Upload className="w-3.5 h-3.5" /> Browse file
           </button>
           {file && <span className="text-xs font-mono bg-white border border-slate-200 px-2 py-1 rounded-full">{file.name} · {(file.size / 1024).toFixed(1)}KB</span>}
-          {file && <button onClick={() => { setFile(null); setPreviewRows([]); setPreviewHeaders([]); setResult(null); setError(null); }} className="p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200"><X className="w-4 h-4" /></button>}
+          {file && <button onClick={() => { setFile(null); setPreviewRows([]); setPreviewHeaders([]); setFullRows([]); setRawText(''); setColumnMapping({} as Record<RetainField,string>); setShowMapping(false); setResult(null); setError(null); }} className="p-1.5 hover:bg-white rounded-lg border border-transparent hover:border-slate-200"><X className="w-4 h-4" /></button>}
         </div>
         {file && (
           <div className="mt-4 flex items-center justify-center gap-2">
@@ -223,15 +367,86 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
         )}
       </div>
 
+      {/* Column Mapping UI */}
+      {previewHeaders.length>0 && (
+        <Card>
+          <SectionHeader
+            title="Column Mapping"
+            subtitle={`Map your CSV headers → RETAINAI fields. Required: name*. Rewrites CSV client-side before upload.`}
+            icon={ArrowRight}
+            action={
+              <div className="flex items-center gap-1.5">
+                <button onClick={()=> setShowMapping(v=>!v)} className={`text-xs px-3 py-1.5 rounded-lg border font-medium ${showMapping ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>{showMapping ? 'Hide mapping' : 'Map columns'}</button>
+                {showMapping && <button onClick={()=>{
+                  const m = autoMap(previewHeaders);
+                  setColumnMapping(m);
+                }} className="text-xs border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"><RefreshCw className="w-3 h-3" /> Auto-map</button>}
+              </div>
+            }
+          />
+          <div className="text-xs text-slate-500 mb-3">Detected headers: <span className="font-mono text-slate-700">{previewHeaders.join(', ')}</span> · {fullRows.length} rows</div>
+          {!showMapping ? (
+            <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-3">
+              Click <b>Map columns</b> if your CSV uses custom headers — e.g., <code className="bg-white px-1 py-0.5 rounded border">company → name</code>, <code className="bg-white px-1 py-0.5 rounded border">revenue → arr</code>. When hidden, upload uses original headers (requires <code className="bg-white px-1 py-0.5 rounded border">name</code>).
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {(RETAIN_FIELDS as readonly string[]).map(field=>{
+                  const f = field as RetainField;
+                  const val = columnMapping[f] || '';
+                  return (
+                    <div key={field} className={`border rounded-lg p-3 ${FIELD_META[f].required ? (val ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50') : 'border-slate-200 bg-white'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-xs font-semibold font-mono">{FIELD_META[f].label} {FIELD_META[f].hint && <span className="text-[11px] font-normal text-slate-500">· {FIELD_META[f].hint}</span>}</label>
+                        {FIELD_META[f].required && !val && <span className="text-[11px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded-full">required</span>}
+                      </div>
+                      <select value={val} onChange={e=> setColumnMapping(m=> ({...m, [f]: e.target.value}))} className="mt-2 w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm bg-white focus:outline-none focus:border-slate-400">
+                        <option value="">— skip —</option>
+                        {previewHeaders.map(h=> <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+              {missingName && <div className="mt-3 bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded-lg flex gap-2"><AlertTriangle className="w-4 h-4 shrink-0" />'name' must be mapped — choose which column holds the customer name.</div>}
+              <div className="mt-3 text-xs text-slate-500">On upload, CSV will be rewritten: mapped headers become <span className="font-mono text-slate-700">{(RETAIN_FIELDS as readonly string[]).filter(f=>columnMapping[f as RetainField]).join(', ') || '—'}</span></div>
+              {showMapping && remappedHeaders.length>0 && remappedPreviewRows.length>0 && (
+                <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold">Remapped preview (first 5 rows)</span>
+                    <span className="text-[11px] font-mono border border-slate-200 bg-white px-2 py-0.5 rounded-full">{remappedHeaders.join(', ')}</span>
+                  </div>
+                  <div className="overflow-auto max-h-40">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-mono text-slate-500">
+                        <tr>{remappedHeaders.map(h => <th key={h} className="text-left p-2 font-medium whitespace-nowrap">{h}</th>)}</tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {remappedPreviewRows.map((r, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            {remappedHeaders.map(h => <td key={h} className="p-2 truncate max-w-[150px]">{r[h] || <span className="text-slate-300">—</span>}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+      )}
+
       {/* Preview */}
-      {previewRows.length > 0 && (
+      {previewRows.length > 0 && !showMapping && (
         <Card padding="p-0">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold">Preview — first {previewRows.length} rows</div>
-              <div className="text-xs text-slate-500">Check columns before upload. Full file has header: {previewHeaders.join(', ')}</div>
+              <div className="text-xs text-slate-500">Check columns before upload. Full file has header: {previewHeaders.join(', ')} · {fullRows.length} total rows</div>
             </div>
-            <span className="text-xs font-mono border border-slate-200 bg-slate-50 px-2 py-1 rounded-full">{previewRows.length} preview rows</span>
+            <span className="text-xs font-mono border border-slate-200 bg-slate-50 px-2 py-1 rounded-full">{fullRows.length} rows</span>
           </div>
           <div className="overflow-auto max-h-52">
             <table className="w-full text-xs">
@@ -261,23 +476,23 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
         </div>
       )}
       {result && (
-        <div className={`border rounded-xl p-4 ${result.created > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+        <div className={`border rounded-xl p-4 ${(result as {created:number}).created > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
           <div className="flex items-center gap-2">
-            {result.created > 0 ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertTriangle className="w-5 h-5 text-amber-600" />}
-            <span className="text-sm font-semibold">{result.message}</span>
-            <span className="text-xs font-mono border bg-white px-2 py-0.5 rounded-full">{result.created} created · {result.skipped} skipped · {result.total_rows} total</span>
+            {(result as {created:number}).created > 0 ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertTriangle className="w-5 h-5 text-amber-600" />}
+            <span className="text-sm font-semibold">{(result as {message:string}).message}</span>
+            <span className="text-xs font-mono border bg-white px-2 py-0.5 rounded-full">{(result as {created:number}).created} created · {(result as {skipped:number}).skipped} skipped · {(result as {total_rows:number}).total_rows ?? (result as {created:number}).created + (result as {skipped:number}).skipped} total</span>
           </div>
-          {result.errors?.length > 0 && (
+          {(result as {errors?:{row:number;error:string;name?:string}[]}).errors && (result as {errors:{row:number;error:string;name?:string}[]}).errors.length > 0 && (
             <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3">
-              <div className="text-xs font-semibold">Rows skipped / errors (first {result.errors.length})</div>
+              <div className="text-xs font-semibold">Rows skipped / errors (first {(result as {errors:unknown[]}).errors.length})</div>
               <div className="mt-2 space-y-1 max-h-32 overflow-auto">
-                {result.errors.map((er: any, i: number) => (
-                  <div key={i} className="text-xs font-mono text-slate-600">Row {er.row}: {er.error} {er.name ? `— ${er.name}` : ''}</div>
+                {(result as {errors:{row:number;error:string;name?:string}[]}).errors.map((er, i: number) => (
+                  <div key={i} className="text-xs font-mono text-slate-600">Row {er.row ?? i+2}: {er.error} {er.name ? `— ${er.name}` : ''}</div>
                 ))}
               </div>
             </div>
           )}
-          {result.created > 0 && <div className="text-xs text-slate-600 mt-2">Customers now visible in <b>Customers</b> and <b>Command Center</b>. Search by name/domain to find them. Run investigation in 360.</div>}
+          {(result as {created:number}).created > 0 && <div className="text-xs text-slate-600 mt-2">Customers now visible in <b>Customers</b> and <b>Command Center</b>. Search by name/domain to find them. Run investigation in 360.</div>}
         </div>
       )}
 
@@ -286,6 +501,7 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
         <div className="font-semibold text-white text-xs">How CSV maps to RETAINAI</div>
         <div className="mt-1 font-mono text-[11px]">name* required — domain auto from name if blank — arr/mrr numeric — health_score 0-100 auto-sets risk_level — renewal_date YYYY-MM-DD defaults +90d — segment/industry/plan/csm_* optional</div>
         <div className="mt-2 text-slate-400">Example: <code className="bg-slate-800 px-1 py-0.5 rounded text-slate-200">Example Corp,example.com,Enterprise,FinTech,Enterprise Tier,180000,,Alex Morgan,alex@retainai.io,42,CRITICAL,2026-09-15,ACTIVE</code></div>
+        <div className="mt-2 text-slate-500">Tip: If your export uses <code className="bg-slate-800 px-1 py-0.5 rounded">company, revenue</code> headers, open <b>Map columns</b> above and remap <code className="bg-slate-800 px-1 py-0.5 rounded">company → name</code>, <code className="bg-slate-800 px-1 py-0.5 rounded">revenue → arr</code> — upload rewrites client-side.</div>
       </div>
     </div>
   );
