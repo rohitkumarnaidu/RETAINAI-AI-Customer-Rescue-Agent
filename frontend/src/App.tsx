@@ -1,138 +1,163 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CommandCenter } from './components/CommandCenter';
 import { Customer360 } from './components/Customer360';
-import { ActionCenter } from './components/ActionCenter';
+import { CustomersView } from './components/CustomersView';
+import { InvestigationsView } from './components/InvestigationsView';
+import { InterventionsView } from './components/InterventionsView';
+import { LearningView } from './components/LearningView';
+import { AuditView } from './components/AuditView';
 import { resetDemo } from './services/api';
-import { LayoutDashboard, Users, Brain, Shield, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, Users, UserCircle2, SearchCode, ClipboardList, GraduationCap, ScrollText, Shield, RefreshCw, Menu, X, FlaskConical } from 'lucide-react';
+
+type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'command' | 'customer360' | 'actions'>('command');
+  const [activeTab, setActiveTab] = useState<Tab>('command');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('acme-corp-001');
-  const [resetting, setResetting] = useState<boolean>(false);
-  const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(()=>{ const id=setInterval(()=>setNow(new Date()),60000); return ()=>clearInterval(id)},[]);
 
   const handleSelectCustomer = (customerId: string) => {
     setSelectedCustomerId(customerId);
     setActiveTab('customer360');
+    setMobileNavOpen(false);
+    window.scrollTo({top:0, behavior:'smooth'});
   };
 
   const handleResetDemo = async () => {
     try {
       setResetting(true);
-      setResetMessage(null);
       const res = await resetDemo();
-      setResetMessage(res.message || "Database reset successfully!");
-      // Reload current view after 1s
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
-    } catch (err: any) {
-      alert("Reset endpoint failed or unreached. Please run `uv run python -m retainai.scripts.seed_database` in backend.");
-    } finally {
-      setResetting(false);
-    }
+      setToast(res.message || "Database reset — 101 accounts restored");
+      setTimeout(()=> window.location.reload(), 900);
+    } catch {
+      setToast("Reset failed — run `python -m retainai.scripts.seed_database` in backend");
+      setTimeout(()=> setToast(null), 3000);
+    } finally { setResetting(false); }
   };
 
+  const navItems: {id:Tab,label:string,icon:any,desc:string}[] = [
+    {id:'command', label:'Command Center', icon:LayoutDashboard, desc:'What needs attention'},
+    {id:'customers', label:'Customers', icon:Users, desc:'Portfolio & filters'},
+    {id:'customer360', label:'Customer 360', icon:UserCircle2, desc:'Investigation workspace'},
+    {id:'investigations', label:'Investigations', icon:SearchCode, desc:'Agent runs & evidence'},
+    {id:'interventions', label:'Interventions', icon:ClipboardList, desc:'Plans & outcomes'},
+    {id:'learning', label:'Learning', icon:GraduationCap, desc:'Experience memory'},
+    {id:'audit', label:'Activity', icon:ScrollText, desc:'Audit trail'},
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
-      {/* Navigation Header */}
-      <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          
-          {/* Logo & Brand */}
+    <div className="min-h-screen bg-[#F8F7F5] text-slate-900 font-sans selection:bg-slate-900 selection:text-white">
+      <div className="bg-[#0F172A] text-slate-300 text-[11px] font-mono tracking-wide">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 h-7 flex items-center justify-between gap-4">
+          <span className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Demo environment · Synthetic customer data · 101 accounts · SENSE → THINK → ACT → MEASURE → LEARN
+          </span>
+          <span className="hidden md:inline text-slate-400">Updated {now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · Monitoring active</span>
+        </div>
+      </div>
+
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 h-[56px] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-950">
-              <Shield className="w-5 h-5 text-white" />
+            <button onClick={()=>setMobileNavOpen(v=>!v)} className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-slate-100" aria-label="Toggle navigation">
+              {mobileNavOpen ? <X className="w-5 h-5"/> : <Menu className="w-5 h-5"/>}
+            </button>
+            <div className="w-8 h-8 rounded-lg bg-[#0F172A] flex items-center justify-center">
+              <Shield className="w-4 h-4 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base tracking-tight text-white font-mono">RETAIN<span className="text-indigo-400">AI</span></span>
-                <span className="text-[10px] bg-indigo-950 text-indigo-400 border border-indigo-800/50 px-2 py-0.5 rounded-full font-mono uppercase tracking-wider">
-                  v1.0 Autonomous Engine
-                </span>
+                <span className="font-bold text-[15px] tracking-tight">RETAIN<span className="font-normal text-slate-500">AI</span></span>
+                <span className="hidden sm:inline text-[10px] border border-slate-200 bg-slate-50 px-1.5 py-0.5 rounded font-mono text-slate-600">AUTONOMOUS ENGINE v1.0</span>
               </div>
-              <p className="text-[11px] text-slate-400 hidden sm:block">Closed-Loop AI Customer Success & Retention Command Center</p>
+              <p className="hidden sm:block text-[11px] text-slate-500 -mt-0.5">Customer retention intelligence — closed-loop system</p>
             </div>
           </div>
 
-          {/* Tab Navigation & Reset Demo Button */}
-          <div className="flex items-center gap-3">
-            <nav className="flex items-center gap-1 bg-slate-900/90 p-1 border border-slate-800/80 rounded-xl">
-              <button
-                onClick={() => setActiveTab('command')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'command'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-                }`}
-              >
-                <LayoutDashboard className="w-3.5 h-3.5" />
-                <span>Command Center</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('customer360')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'customer360'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Customer 360</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('actions')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'actions'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-                }`}
-              >
-                <Brain className="w-3.5 h-3.5" />
-                <span>Action & Learning</span>
-              </button>
-            </nav>
-
-            <button
-              onClick={handleResetDemo}
-              disabled={resetting}
-              className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
-              title="Reset Database to 101 Hybrid Dataset Seed Accounts"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${resetting ? 'animate-spin' : ''}`} />
-              <span className="hidden md:inline">Reset Demo</span>
+          <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-1.5 text-xs font-mono text-slate-500 border border-slate-200 bg-slate-50 px-2.5 py-1.5 rounded-lg">
+              <FlaskConical className="w-3.5 h-3.5" />
+              <span>Acme Corp · Hero scenario</span>
+              <button onClick={()=>handleSelectCustomer('acme-corp-001')} className="ml-1 bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700 hover:bg-slate-50">Open</button>
+            </div>
+            <button onClick={handleResetDemo} disabled={resetting} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50">
+              <RefreshCw className={`w-3.5 h-3.5 ${resetting? 'animate-spin':''}`} /> <span className="hidden sm:inline">Reset demo</span>
             </button>
           </div>
         </div>
       </header>
 
-      {resetMessage && (
-        <div className="bg-emerald-950/80 border-b border-emerald-800/80 text-emerald-300 text-xs py-2 px-4 text-center font-mono animate-fade-in">
-          {resetMessage} (Reloading application...)
-        </div>
-      )}
-
-      {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'command' && <CommandCenter onSelectCustomer={handleSelectCustomer} />}
-        {activeTab === 'customer360' && <Customer360 customerId={selectedCustomerId} />}
-        {activeTab === 'actions' && <ActionCenter />}
-      </main>
-
-      {/* Footer / System Status Bar */}
-      <footer className="border-t border-slate-900 bg-slate-950/60 py-4 mt-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2 font-mono">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>FastAPI Backend Connected: http://localhost:8000</span>
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6 flex gap-6">
+        <aside className="hidden lg:block w-[220px] shrink-0 sticky top-[88px] h-fit">
+          <nav className="space-y-1">
+            {navItems.map(item=>{
+              const Active = item.icon;
+              const active = activeTab===item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={()=>setActiveTab(item.id)}
+                  className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${active ? 'bg-[#0F172A] text-white shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-900 border border-transparent hover:border-slate-200 hover:shadow-sm'}`}
+                >
+                  <Active className={`w-4 h-4 ${active ? 'text-white' : 'text-slate-400'}`} />
+                  <span className="flex-1">
+                    <span className={`block leading-none ${active? 'font-semibold':'font-medium'}`}>{item.label}</span>
+                    <span className={`block text-[11px] leading-none mt-1 ${active? 'text-slate-300':'text-slate-400'}`}>{item.desc}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </nav>
+          <div className="mt-6 bg-white border border-slate-200 rounded-xl p-3.5">
+            <div className="text-xs font-semibold text-slate-900">How RETAINAI works</div>
+            <div className="mt-2 text-[11px] leading-relaxed text-slate-600 font-mono">
+              SENSE → THINK → ACT → MEASURE → LEARN
+            </div>
+            <div className="mt-2 text-xs text-slate-600 leading-relaxed">
+              Detects meaningful change, investigates with evidence, recommends next-best action, measures outcome, learns.
+            </div>
           </div>
-          <div>Loop Protocol: SENSE → THINK → ACT → MEASURE → LEARN</div>
+          <div className="mt-3 text-[11px] text-slate-400 font-mono px-1">© 2026 RETAINAI · BuildSprint</div>
+        </aside>
+
+        {mobileNavOpen && (
+          <div className="lg:hidden fixed inset-0 z-30 bg-black/20" onClick={()=>setMobileNavOpen(false)}>
+            <div onClick={e=>e.stopPropagation()} className="w-[280px] h-full bg-white border-r border-slate-200 p-4 overflow-auto">
+              <nav className="space-y-1">
+                {navItems.map(item=>{
+                  const Icon=item.icon; const active=activeTab===item.id;
+                  return <button key={item.id} onClick={()=>{setActiveTab(item.id); setMobileNavOpen(false)}} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${active? 'bg-slate-900 text-white':'text-slate-600 hover:bg-slate-50'}`}><Icon className="w-4 h-4"/>{item.label}</button>
+                })}
+              </nav>
+            </div>
+          </div>
+        )}
+
+        <main className="flex-1 min-w-0">
+          {toast && <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-3 py-2 rounded-lg">{toast}</div>}
+          {activeTab==='command' && <CommandCenter onSelectCustomer={handleSelectCustomer} />}
+          {activeTab==='customers' && <CustomersView onSelectCustomer={handleSelectCustomer} />}
+          {activeTab==='customer360' && <Customer360 customerId={selectedCustomerId} />}
+          {activeTab==='investigations' && <InvestigationsView onSelectCustomer={handleSelectCustomer} />}
+          {activeTab==='interventions' && <InterventionsView />}
+          {activeTab==='learning' && <LearningView />}
+          {activeTab==='audit' && <AuditView />}
+        </main>
+      </div>
+
+      <footer className="border-t border-slate-200 bg-white mt-8">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 font-mono">
+          <span>RETAINAI · Evidence-based retention · No fabricated certainty</span>
+          <span>Loop: SENSE → THINK → ACT → MEASURE → LEARN → REPEAT</span>
         </div>
       </footer>
     </div>
   );
 }
-
 export default App;
