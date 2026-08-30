@@ -531,7 +531,7 @@ async def get_learning_overview(db: AsyncSession = Depends(get_db), user: dict =
     """Learning overview: candidates vs validated."""
     from sqlalchemy import select
     from retainai.db.models import LearningCandidate
-    cand_res = await db.execute(select(LearningCandidate).order_by(LearningCandidate.created_at.desc()).limit(20))
+    cand_res = await db.execute(select(LearningCandidate).where(LearningCandidate.tenant_id == tenant_id).order_by(LearningCandidate.created_at.desc()).limit(20))
     candidates = list(cand_res.scalars().all())
     mem_repo = MemoryRepository(db, tenant_id=tenant_id)
     validated = await mem_repo.get_validated_memories()
@@ -797,7 +797,7 @@ async def get_portfolio_summary(db: AsyncSession = Depends(get_db), user: dict =
     customer_repo = CustomerRepository(db, tenant_id=tenant_id)
     customers = await customer_repo.list_all()
 
-    arr_at_risk = sum(c.arr for c in customers if c.risk_level in ("CRITICAL", "HIGH_RISK", "AT_RISK"))
+    arr_at_risk = sum(c.arr for c in customers if getattr(c.risk_level, "value", c.risk_level) in ("CRITICAL", "HIGH_RISK", "AT_RISK"))
     risk_distribution = {}
     for c in customers:
         risk_distribution[c.risk_level.value] = risk_distribution.get(c.risk_level.value, 0) + 1
