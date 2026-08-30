@@ -3,6 +3,7 @@ import { Send, Sparkles, BarChart3, Mail, Users, Shield, Bot, Activity, Trash2, 
 import { sendChat, streamChat, getChatConversations, getChatMessages, deleteChatConversation, getCustomers } from '../services/api';
 import { Card, SectionHeader } from './ui';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const AGENTS = [
   { id:'usage', label:'Usage Analyst', desc:'DAU, WAU, license', color:'bg-amber-500', icon: BarChart3 },
@@ -218,8 +219,8 @@ export const ChatView: React.FC<{ onSelectCustomer?:(id:string)=>void }> = ({onS
               <div key={i} className={`flex ${m.role==='user'?'justify-end':'justify-start'}`}>
                 <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed overflow-hidden break-words ${m.role==='user'?'bg-[#0F172A] text-white rounded-br-sm whitespace-pre-wrap':'bg-white border border-slate-200 text-slate-800 rounded-bl-sm shadow-sm'}`}>
                   {m.role==='user' ? m.content : (
-                    <div className="markdown break-words [&_p]:my-1.5 [&_p]:leading-relaxed [&_strong]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1.5 [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:my-2 [&_li]:my-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px] [&_code]:break-all [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-auto [&_pre]:my-2 [&_pre]:text-xs">
-                      <ReactMarkdown>{m.content}</ReactMarkdown>
+                    <div className="markdown break-words [&_p]:my-1.5 [&_p]:leading-relaxed [&_strong]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1.5 [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:my-2 [&_li]:my-0.5 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px] [&_code]:break-all [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-auto [&_pre]:my-2 [&_pre]:text-xs [&_table]:w-full [&_table]:border [&_table]:border-slate-200 [&_table]:rounded-lg [&_table]:overflow-hidden [&_table]:my-3 [&_th]:bg-slate-50 [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:px-2 [&_td]:py-1.5 [&_td]:text-xs [&_td]:border-t [&_td]:border-slate-100">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                     </div>
                   )}
                   {m.evidence_ids && m.evidence_ids.length>0 && (
