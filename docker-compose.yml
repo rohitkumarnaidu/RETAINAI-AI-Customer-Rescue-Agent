@@ -15,19 +15,20 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      # --- Database: prod-like Postgres async driver (required for concurrent multi-tenant writes) ---
-      # Override to sqlite only for local dev without Postgres: sqlite+aiosqlite:///./retainai.db
-      - DATABASE_URL=postgresql+asyncpg://retainai:retainai@db:5432/retainaidb
-      # --- Auth hardening: prod-like enforces JWT, disables demo bypass ---
-      # AUTH_ENABLED=true enforces Bearer JWT (HS256) via JWT_SECRET; DEMO_MODE=false disables DEMO_BYPASS in auth/auth.py:187
-      # For demo/hackathon: set AUTH_ENABLED=false DEMO_MODE=true (see override comment at top)
-      - AUTH_ENABLED=true
-      - DEMO_MODE=false
+      # --- Database: sqlite fallback for demo reliability (postgres also works after timezone fix) ---
+      # Prod-like would be: postgresql+asyncpg://retainai:retainai@db:5432/retainaidb
+      - DATABASE_URL=sqlite+aiosqlite:///./retainai.db
+      # --- Auth: demo bypass enabled for hackathon (image shows DEMO_MODE=true) ---
+      # Prod hardening would be AUTH_ENABLED=true DEMO_MODE=false
+      - AUTH_ENABLED=false
+      - DEMO_MODE=true
       # --- LLM proxy (BYOK per tenant overrides global; see /org/settings) ---
+      # LIVE BRANCH: requires real GROQ_API_KEY=gsk_... or OPENAI_API_KEY=sk_... / LLM_API_KEY — mock_key_for_dev disabled, no mock fallback
       - LLM_PROVIDER=${LLM_PROVIDER:-groq}
       - LLM_MODEL=${LLM_MODEL:-openai/gpt-oss-120b}
-      - LLM_API_KEY=${LLM_API_KEY:-mock_key_for_dev}
+      - LLM_API_KEY=${LLM_API_KEY:-}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - JWT_SECRET=${JWT_SECRET:-retainai-dev-secret-change-in-prod}
       - APP_SECRET_KEY=${APP_SECRET_KEY:-retainai-dev-app-secret-change-in-prod-32chars}
     healthcheck:
@@ -56,7 +57,7 @@ services:
       POSTGRES_PASSWORD: retainai
       POSTGRES_DB: retainaidb
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

@@ -85,7 +85,7 @@ class Tenant(Base):
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     users: Mapped[List["User"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
@@ -104,7 +104,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(SQLEnum(UserRole), nullable=False, default=UserRole.MEMBER)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     tenant: Mapped["Tenant"] = relationship(back_populates="users")
 
@@ -126,8 +126,8 @@ class OrgSettings(Base):
     llm_api_key_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     investigation_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     action_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     tenant: Mapped["Tenant"] = relationship("Tenant")
 
@@ -157,8 +157,8 @@ class Customer(Base):
     health_score: Mapped[float] = mapped_column(Float, nullable=False, default=100.0)
     risk_level: Mapped[RiskLevel] = mapped_column(SQLEnum(RiskLevel), nullable=False, default=RiskLevel.HEALTHY)
     is_false_positive_candidate: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     tenant: Mapped[Optional["Tenant"]] = relationship(back_populates="customers")
@@ -188,7 +188,7 @@ class UsageEvent(Base):
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     daily_active_users: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     active_users: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     wau: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -219,11 +219,11 @@ class FeatureAdoption(Base):
     tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     feature_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    period_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    period_end: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     adoption_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     customer: Mapped["Customer"] = relationship(back_populates="feature_adoptions")
 
@@ -241,8 +241,8 @@ class SupportTicket(Base):
     tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     external_ticket_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     severity: Mapped[str] = mapped_column(String(20), nullable=False, default="MEDIUM")  # LOW, MEDIUM, HIGH, CRITICAL
     category: Mapped[str] = mapped_column(String(50), nullable=False, default="BUG")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="OPEN")  # OPEN, IN_PROGRESS, RESOLVED, CLOSED
@@ -266,7 +266,7 @@ class CustomerFeedback(Base):
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     source: Mapped[str] = mapped_column(String(50), nullable=False, default="CSAT_SURVEY")
     score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-10 or 1-5
     sentiment: Mapped[str] = mapped_column(String(20), nullable=False, default="NEUTRAL")  # POSITIVE, NEUTRAL, NEGATIVE
@@ -290,7 +290,7 @@ class AccountEvent(Base):
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)  # ADMIN_LOGIN, CSM_MEETING, CONTRACT_CHANGE
     description: Mapped[str] = mapped_column(Text, nullable=False)
     metadata_json: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
@@ -315,7 +315,7 @@ class RiskAssessment(Base):
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     health_score: Mapped[float] = mapped_column(Float, nullable=False)
     risk_level: Mapped[RiskLevel] = mapped_column(SQLEnum(RiskLevel), nullable=False)
     usage_health: Mapped[float] = mapped_column(Float, nullable=False, default=100.0)
@@ -344,10 +344,10 @@ class Evidence(Base):
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     source_type: Mapped[str] = mapped_column(String(50), nullable=False)  # USAGE_EVENT, SUPPORT_TICKET, FEEDBACK, ACCOUNT_EVENT
     source_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     importance: Mapped[float] = mapped_column(Float, default=0.5)  # 0.0 to 1.0
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     customer: Mapped["Customer"] = relationship(back_populates="evidences")
 
@@ -366,7 +366,7 @@ class InvestigationReport(Base):
     tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     risk_assessment_id: Mapped[str] = mapped_column(ForeignKey("risk_assessments.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     root_cause: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[str] = mapped_column(String(50), default="HIGH_CONFIDENCE")  # HIGH_CONFIDENCE, MEDIUM_CONFIDENCE, LOW_CONFIDENCE, INSUFFICIENT_EVIDENCE
@@ -407,10 +407,10 @@ class Intervention(Base):
     priority: Mapped[str] = mapped_column(String(20), default="MEDIUM")
     requires_approval: Mapped[bool] = mapped_column(Boolean, default=True)
     status: Mapped[InterventionStatus] = mapped_column(SQLEnum(InterventionStatus), default=InterventionStatus.PROPOSED)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     customer: Mapped["Customer"] = relationship(back_populates="interventions")
     investigation: Mapped["InvestigationReport"] = relationship(back_populates="interventions")
@@ -431,8 +431,8 @@ class InterventionOutcome(Base):
     tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     intervention_id: Mapped[str] = mapped_column(ForeignKey("interventions.id"), nullable=False)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    evaluated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     status: Mapped[OutcomeStatus] = mapped_column(SQLEnum(OutcomeStatus), default=OutcomeStatus.PENDING)
     outcome: Mapped[str] = mapped_column(String(20), default="UNKNOWN")  # SUCCESS|PARTIAL|FAILED|UNKNOWN
     health_before: Mapped[float] = mapped_column(Float, nullable=False)
@@ -466,9 +466,9 @@ class ExperienceMemory(Base):
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    last_observed: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    last_observed: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     context_pattern: Mapped[str] = mapped_column(String(150), nullable=False)
     pattern: Mapped[str] = mapped_column(String(150), nullable=False, default="")
     customer_segment: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -537,7 +537,7 @@ class AgentStep(Base):
     tool_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="SUCCESS")
     latency_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
@@ -564,8 +564,8 @@ class LearningCandidate(Base):
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(30), default="PENDING_VALIDATION")
     validation_status: Mapped[ValidationStatus] = mapped_column(SQLEnum(ValidationStatus), default=ValidationStatus.CANDIDATE)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("idx_candidates_tenant", "tenant_id"),
@@ -581,8 +581,8 @@ class AgentRun(Base):
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[AgentRunStatus] = mapped_column(SQLEnum(AgentRunStatus), default=AgentRunStatus.RUNNING)
     workflow_type: Mapped[str] = mapped_column(String(100), nullable=False, default="INVESTIGATION_RESCUE")
     model: Mapped[str] = mapped_column(String(50), nullable=False, default="gemini-2.5-flash")
@@ -613,7 +613,7 @@ class SystemEventLog(Base):
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     customer_id: Mapped[str] = mapped_column(String(50), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)

@@ -83,6 +83,7 @@ class InvestigationAgent:
             return fallback
 
         # Construct deterministic fallback payload — dynamic evidence grounding
+        # LIVE BRANCH (hybrid-live-dynamic): fallback_data is last-resort only — used only when live LLM call fails (HTTP non-200 / exception / parse failure). No mock fallback for successful path.
         open_tickets = [t for t in support_tickets if t.get("status") in ("OPEN", "IN_PROGRESS")]
         if open_tickets:
             primary_ticket = open_tickets[0]
@@ -103,6 +104,7 @@ class InvestigationAgent:
         fallback_root_cause = f"Feature export friction in {ticket_str} caused negative sentiment in {feedback_str}, leading to a drop in active usage."
         fallback_action = f"Escalate ticket {fallback_ticket_ref} to Sprint Priority 1 and arrange technical onboarding sync with Head of Product."
 
+        # LIVE BRANCH: this fallback is last-resort only — passed to LLMClient.generate_structured_json fallback_data; live call is attempted first
         fallback = InvestigationOutputSchema(
             summary=fallback_summary,
             root_cause=fallback_root_cause,
