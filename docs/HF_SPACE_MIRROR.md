@@ -93,7 +93,7 @@ CMD ["sh","-c","uv run uvicorn app:app --host 0.0.0.0 --port ${PORT}"]
 | `LLM_PROVIDER` | `groq` | Variable | |
 | `LLM_MODEL` | `openai/gpt-oss-120b` | Variable | Groq prod Aug 2026 (llama-3.3 sunset 16 Aug) |
 | `OPENAI_API_KEY` | `sk_...` | Secret | Only if `LLM_PROVIDER=openai` |
-| `CORS_ORIGINS` | `https://retainai.vercel.app,http://localhost:5173,https://<USER>-retainai-live-mirror.hf.space` | Variable | Must include Vercel origin + HF origin |
+| `CORS_ORIGINS` | `https://retainai-rescue-agent.vercel.app,http://localhost:5173,https://<USER>-retainai-live-mirror.hf.space` | Variable | Must include Vercel origin + HF origin |
 | `DEMO_MODE` | `true` | Variable | Mirror demo default |
 | `AUTH_ENABLED` | `false` | Variable | |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./retainai.db` | Variable | Ephemeral on HF; see §4 |

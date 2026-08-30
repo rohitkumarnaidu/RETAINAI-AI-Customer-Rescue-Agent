@@ -31,7 +31,7 @@ Both expose identical FastAPI surface: /health, /readiness, /api/v1/*
 
 - **Primary**: Render `retainai-api-live` (Docker, `backend/Dockerfile`, health `/health`)
 - **Mirror**: This Space (Docker, `hf_space/Dockerfile` → same FastAPI app)
-- **Frontend**: Vercel `retainai.vercel.app` (`frontend/`, `vercel.json`, `VITE_API_BASE_URL` → Render URL; switch to HF URL by env var)
+- **Frontend**: Vercel `retainai-rescue-agent.vercel.app` (`frontend/`, `vercel.json`, `VITE_API_BASE_URL` → Render URL; switch to HF URL by env var)
 
 ## Quick Start — Create the Space
 
@@ -56,7 +56,7 @@ Both expose identical FastAPI surface: /health, /readiness, /api/v1/*
    - `LLM_PROVIDER` = `groq`
    - `LLM_MODEL`    = `openai/gpt-oss-120b`
    - `OPENAI_API_KEY` = `sk_...` (only if `LLM_PROVIDER=openai`)
-   - `CORS_ORIGINS` = `https://retainai.vercel.app,http://localhost:5173,https://<YOUR_USERNAME>-retainai-live-mirror.hf.space`
+   - `CORS_ORIGINS` = `https://retainai-rescue-agent.vercel.app,http://localhost:5173,https://<YOUR_USERNAME>-retainai-live-mirror.hf.space`
    - `DEMO_MODE` = `true`  (mirror demo; set `false` + `AUTH_ENABLED=true` for prod)
    - `AUTH_ENABLED` = `false`
    - `DATABASE_URL` = `sqlite+aiosqlite:///./retainai.db` (ephemeral on HF; add HF Postgres if needed)

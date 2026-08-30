@@ -95,7 +95,7 @@ services:
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///./retainai.db
       - key: CORS_ORIGINS
-        value: https://retainai.vercel.app,http://localhost:5173
+        value: https://retainai-rescue-agent.vercel.app,http://localhost:5173
       - key: DEMO_MODE
         value: true
       - key: AUTH_ENABLED
@@ -146,10 +146,10 @@ curl http://localhost:8000/health
 2. **Env Vars (Settings → Environment Variables):**
    - `VITE_API_BASE_URL` = `https://retainai-api-live.onrender.com/api/v1` (Render URL from §2) — **rebuild required** (Vite inlines at build)
    - Optional: `VITE_APP_NAME=RETAINAI`, `VITE_TENANT_ID=tenant_demo_32char_id_12345678`
-3. Deploy → `https://retainai.vercel.app` (or `retainai-xxx.vercel.app`)
+3. Deploy → `https://retainai-rescue-agent.vercel.app` (or `retainai-xxx.vercel.app`)
 4. Verify:
 ```bash
-curl https://retainai.vercel.app # 200, contains RETAINAI
+curl https://retainai-rescue-agent.vercel.app # 200, contains RETAINAI
 # In browser: open Vercel URL → CommandCenter 101 → Acme Corp 48.9 AT_RISK → Run AI Investigation → 6 signals, evidence_ids, 3-step plan → Approve → SUCCESS
 ```
 
@@ -171,7 +171,7 @@ bash ~/.claude/skills/deploy-to-vercel/resources/deploy.sh
 vercel link --repo --scope <team> # then git push triggers preview
 ```
 
-> **CORS:** Render `CORS_ORIGINS` must contain `https://retainai.vercel.app`. Update in Render dashboard if Vercel URL differs.
+> **CORS:** Render `CORS_ORIGINS` must contain `https://retainai-rescue-agent.vercel.app`. Update in Render dashboard if Vercel URL differs.
 
 ---
 
@@ -198,7 +198,7 @@ git push
 - `GROQ_API_KEY=gsk_...` **Secret**
 - `LLM_PROVIDER=groq` Variable
 - `LLM_MODEL=openai/gpt-oss-120b`
-- `CORS_ORIGINS=https://retainai.vercel.app,http://localhost:5173,https://<USER>-retainai-live-mirror.hf.space`
+- `CORS_ORIGINS=https://retainai-rescue-agent.vercel.app,http://localhost:5173,https://<USER>-retainai-live-mirror.hf.space`
 - `DEMO_MODE=true` `AUTH_ENABLED=false` `DATABASE_URL=sqlite+aiosqlite:///./retainai.db` (ephemeral) or `/data/retainai.db` for persistence
 
 ### 4.4 Verify Mirror
@@ -216,7 +216,7 @@ See `docs/HF_SPACE_MIRROR.md:1` + `hf_space/README.md:1` for full runbook.
 ## 5. Credentials for Submission Form
 
 ```
-Agent Access Link (Primary): https://retainai.vercel.app
+Agent Access Link (Primary): https://retainai-rescue-agent.vercel.app
 Backend API: https://retainai-api-live.onrender.com
 Docs: https://retainai-api-live.onrender.com/docs
 Mirror (Additional Materials): https://<USER>-retainai-live-mirror.hf.space
@@ -236,7 +236,7 @@ Acme hero: b2a88551-82e5-43d7-b620-ba1640900c71 / acmecorp.com / ARR 144000 / CS
 
 ```bash
 RENDER=https://retainai-api-live.onrender.com
-FRONT=https://retainai.vercel.app
+FRONT=https://retainai-rescue-agent.vercel.app
 
 # Backend live
 curl $RENDER/health | jq

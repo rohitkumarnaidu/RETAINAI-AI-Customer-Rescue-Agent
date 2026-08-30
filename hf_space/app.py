@@ -14,7 +14,7 @@ Env:
   - GROQ_API_KEY / LLM_API_KEY / OPENAI_API_KEY (set as HF Space Secrets, sync:false)
   - LLM_PROVIDER=groq, LLM_MODEL=openai/gpt-oss-120b
   - DATABASE_URL=sqlite+aiosqlite:///./retainai.db (ephemeral on HF)
-  - CORS_ORIGINS=https://retainai.vercel.app,http://localhost:5173,https://<user>-retainai-live-mirror.hf.space
+  - CORS_ORIGINS=https://retainai-rescue-agent.vercel.app,http://localhost:5173,https://<user>-retainai-live-mirror.hf.space
   - DEMO_MODE=true, AUTH_ENABLED=false (mirror demo defaults)
   - PORT=7860 (HF requires 7860; Render uses 8000)
 """
