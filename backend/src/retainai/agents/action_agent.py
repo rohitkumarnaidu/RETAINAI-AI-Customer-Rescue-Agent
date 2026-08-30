@@ -54,6 +54,7 @@ class ActionStrategyAgent:
         ticket_match = re.search(r"(TICK[-\s]?\w+|tck_\w+|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4})", root_cause + " " + investigation_summary, re.I)
         primary_ticket_ref = ticket_match.group(1) if ticket_match else "reported support ticket"
 
+        # LIVE BRANCH (hybrid-live-dynamic): fallback_data is last-resort only — used only when live LLM call fails (HTTP non-200 / exception / parse failure). No mock fallback for successful path.
         fallback_steps = [
             {
                 "step": 1,
@@ -84,6 +85,7 @@ class ActionStrategyAgent:
             "body": f"Hi team,\n\nI wanted to personally reach out regarding the issue reported under {primary_ticket_ref}. Our engineering team has escalated this to Sprint Priority 1 and dispatched a patch.\n\nCould we schedule a brief 10-minute sync this week to confirm the fix meets your month-end reporting needs?\n\nBest regards,\n{csm_name}\nCustomer Success Lead",
         }
 
+        # LIVE BRANCH: this fallback is last-resort only — passed to LLMClient.generate_structured_json fallback_data; live call is attempted first
         fallback = RetentionPlanOutputSchema(
             action_type="ENGINEERING_ESCALATION_AND_EXECUTIVE_CHECKIN",
             title=f"Emergency Export Bug Patch & Executive Check-in for {customer_name}",

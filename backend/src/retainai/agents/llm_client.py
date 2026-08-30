@@ -22,13 +22,18 @@ class LLMClient:
         provider: Optional[str] = None,
     ):
         # Resolve api_key: prefer explicit, then settings.LLM_API_KEY, then provider-specific aliases, then raw env
+        # LIVE BRANCH (hybrid-live-dynamic): mock_key_for_dev disabled — not a valid sentinel. Treat as invalid/missing that must attempt live call and error visibly if no real key.
+        # Do NOT include mock_key_for_dev in empty-check; explicitly force it to invalid so it proceeds to live call (not silent fallback).
         resolved_key = api_key or settings.LLM_API_KEY
-        if (not resolved_key or resolved_key in ("mock_key_for_dev", "")) and getattr(settings, "GROQ_API_KEY", ""):
+        if resolved_key == "mock_key_for_dev":
+            # mock disabled: force empty so alias resolution below can be attempted; if no real alias, live call will error (no instant mock fallback)
+            resolved_key = ""
+        if (not resolved_key or resolved_key == "your_llm_api_key_here") and getattr(settings, "GROQ_API_KEY", ""):
             resolved_key = settings.GROQ_API_KEY
-        if (not resolved_key or resolved_key in ("mock_key_for_dev", "")) and getattr(settings, "OPENAI_API_KEY", ""):
+        if (not resolved_key or resolved_key == "your_llm_api_key_here") and getattr(settings, "OPENAI_API_KEY", ""):
             resolved_key = settings.OPENAI_API_KEY
         # Also check raw env for GROQ/OPENAI (in case .env has them directly)
-        if (not resolved_key or resolved_key in ("mock_key_for_dev", "")):
+        if not resolved_key or resolved_key == "your_llm_api_key_here":
             import os
             env_groq = os.getenv("GROQ_API_KEY") or os.getenv("GROQ_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
             if env_groq:
@@ -46,9 +51,10 @@ class LLMClient:
     ) -> T:
         """Generates structured JSON adhering to response_schema, using fallback_data on error."""
         # 1. Check for mock/dev environment with explicit honesty logging (S33/S96)
-        is_mock = self.api_key in ("your_llm_api_key_here", "mock_key_for_dev", "")
+        # LIVE BRANCH (hybrid-live-dynamic): mock_key_for_dev disabled — not a valid mock sentinel (would force live call and error visibly)
+        is_mock = self.api_key in ("your_llm_api_key_here", "")
         if is_mock:
-            logger.info(f"Using deterministic fallback response (mock API key) provider={self.provider} model={self.model}")
+            logger.info(f"LIVE MODE: mock disabled — attempting live LLM call; missing key will error provider={self.provider} model={self.model}")
             validated = response_schema.model_validate(fallback_data)
             # Tag fallback honesty for orchestrator traceability
             try:
@@ -115,7 +121,7 @@ class LLMClient:
                         logger.info(f"LLM live response provider=groq model={effective_model} schema={response_schema.__name__}")
                         return response_schema.model_validate(json_dict)
                     else:
-                        logger.warning(f"Groq API returned HTTP {resp.status_code} body={resp.text[:300]}. Using fallback.")
+                        logger.warning(f"Groq API returned HTTP {resp.status_code} body={resp.text[:300]}. Using fallback provider={self.provider} model={effective_model} — live call failed.")
 
             elif self.provider in ("openai", "gpt", "gpt-4", "gpt-4o", "o1", "o3"):
                 # OpenAI GPT — best quality for structured investigation (JSON mode)
@@ -148,10 +154,11 @@ class LLMClient:
                         logger.info(f"LLM live response provider=openai model={effective_model} schema={response_schema.__name__}")
                         return response_schema.model_validate(json_dict)
                     else:
-                        logger.warning(f"OpenAI API returned HTTP {resp.status_code} body={resp.text[:300]}. Using fallback.")
+                        logger.warning(f"OpenAI API returned HTTP {resp.status_code} body={resp.text[:300]}. Using fallback provider={self.provider} model={effective_model} — live call failed.")
 
         except Exception as e:
-            logger.error(f"LLM call failed with exception: {e}. Executing deterministic fallback.")
+            logger.error(f"LLM call failed with exception: {e}. Executing deterministic fallback provider={self.provider} model={self.model}.")
 
-        # 3. Fallback on any failure
+        # 3. Fallback on any failure — LIVE BRANCH: last-resort only (HTTP non-200 / exception / parse failure). Logs warning with provider/model.
+        logger.warning(f"LLM fallback (last-resort) provider={self.provider} model={self.model} — live call failed (HTTP non-200 / exception / parse failure); returning fallback_data")
         return response_schema.model_validate(fallback_data)

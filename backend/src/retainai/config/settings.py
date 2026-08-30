@@ -28,11 +28,11 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./retainai.db"
 
-    LLM_PROVIDER: str = "groq"  # groq | openai/gpt | gemini | mock — groq LPU fastest
+    LLM_PROVIDER: str = "groq"  # groq | openai/gpt | gemini — groq LPU fastest (mock disabled on live branch)
     LLM_MODEL: str = "openai/gpt-oss-120b"  # groq production (Aug 2026): openai/gpt-oss-120b ~500tps $0.15/$0.60 | openai/gpt-oss-20b ~1000tps $0.075/$0.30 — legacy llama-3.3-70b/llama-3.1-8b shutdown 16 Aug 2026
-    LLM_API_KEY: str = "mock_key_for_dev"
-    GROQ_API_KEY: str = ""  # alias for LLM_API_KEY when provider=groq (gsk_...)
-    OPENAI_API_KEY: str = ""  # alias when provider=openai/gpt (sk-...)
+    LLM_API_KEY: str = ""  # LIVE BRANCH: must be provided via .env / env var / GROQ_API_KEY / OPENAI_API_KEY — mock_key_for_dev disabled, no mock fallback
+    GROQ_API_KEY: str = ""  # alias for LLM_API_KEY when provider=groq (gsk_...) — live branch requires real key
+    OPENAI_API_KEY: str = ""  # alias when provider=openai/gpt (sk-...) — live branch requires real key
 
     API_V1_PREFIX: str = "/api/v1"
     CORS_ORIGINS: list[str] = Field(default=["http://localhost:5173", "http://127.0.0.1:5173"])
