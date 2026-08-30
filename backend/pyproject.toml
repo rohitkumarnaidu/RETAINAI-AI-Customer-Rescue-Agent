@@ -41,6 +41,9 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
 
+[tool.vercel]
+entrypoint = "src.retainai.main:app"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

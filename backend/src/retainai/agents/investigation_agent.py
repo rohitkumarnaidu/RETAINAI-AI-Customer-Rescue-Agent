@@ -49,6 +49,7 @@ class InvestigationAgent:
         feedback_entries: List[Dict[str, Any]],
         account_events: List[Dict[str, Any]],
         system_prompt_override: Optional[str] = None,
+        llm_client: Optional[LLMClient] = None,
     ) -> InvestigationOutputSchema:
         # Collect all evidence IDs
         collected_evidence_ids = []
@@ -126,7 +127,8 @@ class InvestigationAgent:
         })
 
         effective_prompt = system_prompt_override or _resolve_system_prompt()
-        return await self.client.generate_structured_json(
+        client = llm_client or self.client
+        return await client.generate_structured_json(
             system_prompt=effective_prompt,
             user_prompt=user_prompt,
             response_schema=InvestigationOutputSchema,

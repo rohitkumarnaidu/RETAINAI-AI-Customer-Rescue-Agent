@@ -281,6 +281,7 @@ class AgentOrchestrator:
             # 2. Forensic Investigation Agent with RISK_ASSESSMENT state
             await self._transition_state(agent_run, AgentState.RISK_ASSESSMENT.value)
             await self._transition_state(agent_run, AgentState.ROOT_CAUSE_ANALYSIS.value)
+            tenant_llm_client, tenant_prompts = await self._load_tenant_llm_and_prompts()
             investigation_res = await self.investigation_agent.investigate(
                 customer_name=profile["name"],
                 health_score=reassessment["health_score"],
@@ -290,10 +291,12 @@ class AgentOrchestrator:
                 support_tickets=sanitized_tickets,
                 feedback_entries=sanitized_feedback,
                 account_events=evidence["account_events"],
+                llm_client=tenant_llm_client,
+                system_prompt_override=tenant_prompts.get("investigation"),
             )
 
-            # Evidence grounding validation
-            evidence_check = self._validate_evidence_ids(investigation_res.evidence_ids, evidence)
+            # Evidence grounding validation (include signal ids)
+            evidence_check = self._validate_evidence_ids_with_signals(investigation_res.evidence_ids, evidence, signals)
             if evidence_check["invalid"]:
                 logger.warning(f"Investigation claimed invalid evidence IDs {evidence_check['invalid']} for customer {customer_id}; filtering to valid only")
                 # Filter to only valid IDs to prevent fabrication leakage
@@ -374,6 +377,8 @@ class AgentOrchestrator:
                 investigation_summary=investigation_res.summary,
                 root_cause=investigation_res.root_cause,
                 matched_memories=matched_memories,
+                llm_client=tenant_llm_client,
+                system_prompt_override=tenant_prompts.get("action"),
             )
 
             # Validate plan output schema strictly
@@ -412,7 +417,9 @@ class AgentOrchestrator:
             self.session.add(intervention_record)
             await self._transition_state(agent_run, AgentState.AWAITING_APPROVAL.value)
 
-            # Structured agent output schema validation (S42)
+            # Structured agent output schema validation (S42) + LLM honesty
+            is_fallback = getattr(investigation_res, "_fallback_used", False) or getattr(plan_res, "_fallback_used", False) or getattr(investigation_res, "__dict__", {}).get("_fallback_used", False)
+            llm_mode = "fallback" if is_fallback else "live"
             structured_output = {
                 "status": "INSUFFICIENT_EVIDENCE" if investigation_res.confidence == "INSUFFICIENT_EVIDENCE" else ("HUMAN_REVIEW" if investigation_res.uncertainty_status in ("CONFLICTING_EVIDENCE","SPARSE_DATA") else "READY"),
                 "risk_interpretation": reassessment["risk_level"],
@@ -423,6 +430,8 @@ class AgentOrchestrator:
                 "confidence": 0.4 if investigation_res.confidence=="INSUFFICIENT_EVIDENCE" else 0.88,
                 "uncertainty": investigation_res.missing_evidence,
                 "requires_human_approval": requires_approval,
+                "llm_mode": llm_mode,
+                "tenant_llm": self._tenant_llm_config,
             }
             # Basic rejection of invalid output (schema check)
             if not isinstance(structured_output["confidence"], (int,float)) or not (0 <= structured_output["confidence"] <= 1):

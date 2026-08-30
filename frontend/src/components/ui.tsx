@@ -1,15 +1,15 @@
 import React from 'react';
 
 export const Card: React.FC<{children:React.ReactNode; className?:string; padding?:string}> = ({children, className='', padding='p-5'})=>(
-  <div className={`bg-white border border-slate-200 rounded-xl shadow-sm ${padding} ${className}`}>{children}</div>
+  <div className={`bg-white border border-slate-200 rounded-xl shadow-sm min-w-0 overflow-hidden ${padding} ${className}`}>{children}</div>
 );
 export const SectionHeader: React.FC<{title:string; subtitle?:string; action?:React.ReactNode; icon?:any}> = ({title, subtitle, action, icon:Icon})=>(
-  <div className="flex items-start justify-between gap-4 mb-4">
-    <div>
-      <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">{Icon && <Icon className="w-4 h-4 text-slate-500"/>}{title}</h3>
-      {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4 min-w-0">
+    <div className="min-w-0 flex-1">
+      <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 leading-tight">{Icon && <Icon className="w-4 h-4 text-slate-500 shrink-0"/>}<span className="truncate">{title}</span></h3>
+      {subtitle && <p className="text-xs text-slate-500 mt-1 leading-relaxed">{subtitle}</p>}
     </div>
-    {action}
+    {action && <div className="shrink-0">{action}</div>}
   </div>
 );
 export const Skeleton: React.FC<{className?:string}> = ({className=''})=> <div className={`skeleton rounded ${className}`} />;

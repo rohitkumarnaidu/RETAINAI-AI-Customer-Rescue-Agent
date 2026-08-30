@@ -47,6 +47,7 @@ class ActionStrategyAgent:
         root_cause: str,
         matched_memories: List[Dict[str, Any]],
         system_prompt_override: Optional[str] = None,
+        llm_client: Optional[LLMClient] = None,
     ) -> RetentionPlanOutputSchema:
         memory_ids = [m["id"] for m in matched_memories if "id" in m]
         # Dynamic ticket reference from root cause / investigation summary
@@ -106,7 +107,8 @@ class ActionStrategyAgent:
         })
 
         effective_prompt = system_prompt_override or _resolve_system_prompt()
-        return await self.client.generate_structured_json(
+        client = llm_client or self.client
+        return await client.generate_structured_json(
             system_prompt=effective_prompt,
             user_prompt=user_prompt,
             response_schema=RetentionPlanOutputSchema,

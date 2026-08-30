@@ -75,7 +75,7 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
 
   const handleApprove = async()=>{
     const id=result?.intervention_id; if(!id) return;
-    try{ setApproving(true); await approveIntervention(id, customer?.csm_name||'CSM'); setApprovedId(id); setSuccess(`Approved ${id.slice(0,12)} — moved to MEASURE. Now record outcome after 14d window (or demo now).`); const updated = await getCustomerInterventions(customerId).catch(()=>[]); setInterventions(Array.isArray(updated)?updated:[]); }
+    try{ setApproving(true); await approveIntervention(id, customer?.csm_name||'CSM'); setApprovedId(id); setSuccess(`Approved ${id.slice(0,12)} — moved to MEASURE. Now record outcome after 14d window (or demo now).`); const updated = await getCustomerInterventions(customerId).catch(()=>[]); setInterventions(Array.isArray(updated)?updated:[]); try{ const { emitRefresh } = await import('../services/api'); emitRefresh('portfolio'); emitRefresh('interventions'); emitRefresh('investigations'); } catch{} }
     catch(e:any){ setError(e.message||'Approve failed'); }
     finally{ setApproving(false); }
   };
@@ -95,6 +95,7 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
       const [updatedRisk, updatedTl, updatedSignals] = await Promise.all([getCustomerRisk(customerId).catch(()=>null), getCustomerTimeline(customerId,60).catch(()=>[]), getCustomerSignals(customerId).catch(()=>[])]);
       setRisk(updatedRisk); setTimeline(updatedTl); setSignals(Array.isArray(updatedSignals)?updatedSignals:updatedSignals as any);
       setSuccess(`Injected ${type} → ${res.status} (health ${updatedRisk?.health_score ?? '—'} ${updatedRisk?.risk_level ?? ''}) — now click Run investigation`);
+      try{ const { emitRefresh } = await import('../services/api'); emitRefresh('portfolio'); emitRefresh('customers'); } catch{}
     }catch(e:any){ setError(e.message||'Inject failed');}
     finally{ setInjecting(null); }
   };
@@ -117,6 +118,7 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
       setInterventions(Array.isArray(updatedInters)?updatedInters:[]);
       // also refresh risk
       const nr = await getCustomerRisk(customerId).catch(()=>null); if(nr) setRisk(nr);
+      try{ const { emitRefresh } = await import('../services/api'); emitRefresh('portfolio'); emitRefresh('interventions'); emitRefresh('learning'); } catch{}
     }catch(er:any){ setOutcomeError(er?.response?.data?.detail || er.message || 'Record failed'); }
     finally{ setRecording(false); }
   };
@@ -154,21 +156,21 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
         <span>Customers</span> <ChevronRight className="w-3 h-3"/> <span className="text-slate-700 font-medium">{customer.name}</span> <span className="text-slate-400">· 360</span>
       </div>
 
-      {/* Stepper */}
-      <div className="bg-white border border-slate-200 rounded-xl p-3">
-        <div className="flex items-center justify-between gap-1">
+      {/* Stepper — responsive, no text mixing */}
+      <div className="bg-white border border-slate-200 rounded-xl p-3 overflow-hidden">
+        <div className="flex items-center justify-between gap-0.5 sm:gap-1">
           {stepLabels.map((s,i)=>(
             <React.Fragment key={s}>
-              <div className="flex flex-col items-center gap-1 flex-1">
-                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border ${i<stepIndex ? 'bg-emerald-600 text-white border-emerald-600' : i===stepIndex ? 'bg-slate-900 text-white border-slate-900 animate-pulse' : 'bg-white border-slate-200 text-slate-500'}`}>{i<stepIndex ? <Check className="w-3.5 h-3.5"/> : i+1}</span>
-                <span className={`text-[11px] font-mono font-medium ${i===stepIndex ? 'text-slate-900' : i<stepIndex ? 'text-emerald-700' : 'text-slate-500'}`}>{s}</span>
-                <span className="text-[11px] text-slate-400 hidden sm:block">{stepDescs[i]}</span>
+              <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border shrink-0 ${i<stepIndex ? 'bg-emerald-600 text-white border-emerald-600' : i===stepIndex ? 'bg-slate-900 text-white border-slate-900 animate-pulse' : 'bg-white border-slate-200 text-slate-500'}`}>{i<stepIndex ? <Check className="w-3.5 h-3.5 shrink-0"/> : i+1}</span>
+                <span className={`text-[10px] sm:text-[11px] font-mono font-medium whitespace-nowrap ${i===stepIndex ? 'text-slate-900' : i<stepIndex ? 'text-emerald-700' : 'text-slate-500'}`}>{s}</span>
+                <span className="text-[10px] text-slate-400 hidden lg:block leading-none text-center truncate max-w-[90px]" title={stepDescs[i]}>{stepDescs[i]}</span>
               </div>
-              {i<4 && <div className={`flex-1 h-0.5 mx-1 ${i<stepIndex ? 'bg-emerald-600' : 'bg-slate-200'}`} />}
+              {i<4 && <div className={`flex-1 h-0.5 mx-0.5 sm:mx-1 min-w-[8px] ${i<stepIndex ? 'bg-emerald-600' : 'bg-slate-200'}`} />}
             </React.Fragment>
           ))}
         </div>
-        <div className="text-xs text-slate-600 mt-2 text-center">
+        <div className="text-xs text-slate-600 mt-2.5 text-center leading-relaxed px-2">
           {stepIndex===0 && <>Start in <b>SENSE</b>: inject live data or import CSV, then run investigation</>}
           {stepIndex===1 && <>Signals detected — run <b>THINK</b>: click <b>Run investigation</b></>}
           {stepIndex===2 && <>Plan ready in <b>ACT</b>: approve or reject the recommendation</>}
@@ -177,27 +179,27 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          {hasHealthScore ? <HealthRing score={healthScore!} size={64} /> : <div className="w-[64px] h-[64px] rounded-full border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-xl" aria-label="Health score unavailable">—</div>}
-          <div>
+      <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 min-w-0">
+        <div className="flex items-center gap-4 min-w-0 flex-1">
+          {hasHealthScore ? <HealthRing score={healthScore!} size={64} /> : <div className="w-[64px] h-[64px] rounded-full border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-xl shrink-0" aria-label="Health score unavailable">—</div>}
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-semibold tracking-tight">{customer.name}</h1>
-              {riskLevel ? <RiskBadge level={riskLevel} size="md" /> : <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 text-slate-500 px-2.5 py-1 text-xs font-mono" aria-label="Risk level unavailable">—</span>}
-              {customer.is_false_positive_candidate && <span className="text-xs border border-amber-200 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-mono">False-positive candidate</span>}
+              <h1 className="text-xl font-semibold tracking-tight leading-tight truncate" title={customer.name}>{customer.name}</h1>
+              {riskLevel ? <RiskBadge level={riskLevel} size="md" /> : <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 text-slate-500 px-2.5 py-1 text-xs font-mono whitespace-nowrap shrink-0" aria-label="Risk level unavailable">—</span>}
+              {customer.is_false_positive_candidate && <span className="text-xs border border-amber-200 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-mono whitespace-nowrap shrink-0">False-positive candidate</span>}
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1 font-mono">
-              <span className="inline-flex items-center gap-1"><Building className="w-3 h-3"/>{customer.domain}</span>
-              <span>·</span><span>{customer.industry}</span><span>·</span><span>{customer.segment}</span>
-              <span>·</span><span className="text-slate-700 font-medium">{customer.plan}</span>
-              <span>·</span><span className="text-emerald-700 font-semibold">${customer.arr.toLocaleString()} ARR</span>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 mt-1 font-mono leading-relaxed">
+              <span className="inline-flex items-center gap-1 shrink-0"><Building className="w-3 h-3 shrink-0"/>{customer.domain}</span>
+              <span>·</span><span className="whitespace-nowrap">{customer.industry}</span><span>·</span><span className="whitespace-nowrap">{customer.segment}</span>
+              <span>·</span><span className="text-slate-700 font-medium whitespace-nowrap truncate max-w-[140px]" title={customer.plan}>{customer.plan}</span>
+              <span>·</span><span className="text-emerald-700 font-semibold whitespace-nowrap shrink-0">${Math.round(Number(customer.arr)||0).toLocaleString('en-US')} ARR</span>
             </div>
-            <div className="text-xs text-slate-500 mt-1">Renewal {customer.renewal_date} · Lifecycle {customer.lifecycle_stage} · CSM {customer.csm_name}</div>
+            <div className="text-xs text-slate-500 mt-1 leading-relaxed truncate" title={`Renewal ${customer.renewal_date} · Lifecycle ${customer.lifecycle_stage} · CSM ${customer.csm_name}`}>Renewal {customer.renewal_date} · Lifecycle {customer.lifecycle_stage} · CSM {customer.csm_name}</div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={handleInvestigate} disabled={investigating} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50">
-            {investigating ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/><span>Investigating…</span></> : <><Sparkles className="w-4 h-4"/>Run investigation</>}
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={handleInvestigate} disabled={investigating} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50 whitespace-nowrap shrink-0">
+            {investigating ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0"/><span>Investigating…</span></> : <><Sparkles className="w-4 h-4 shrink-0"/>Run investigation</>}
           </button>
         </div>
       </div>
@@ -215,18 +217,18 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
 
       <Card>
         <SectionHeader title="Inject Live Data (SENSE)" subtitle="Add real telemetry — DB persists, health/risk reassesses instantly, then Run investigation to see agent tools + report" icon={Zap} />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-          <button onClick={()=>handleInject('USAGE_EVENT')} disabled={!!injecting} className="inline-flex items-center justify-center gap-1.5 border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-amber-100 disabled:opacity-50">
-            {injecting==='USAGE_EVENT' ? <><div className="w-3.5 h-3.5 border-2 border-amber-700 border-t-transparent rounded-full animate-spin"/><span>Injecting…</span></> : <><TrendingDown className="w-3.5 h-3.5"/>Inject Usage Drop (DAU 8)</>}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <button onClick={()=>handleInject('USAGE_EVENT')} disabled={!!injecting} className="inline-flex items-center justify-center gap-1.5 border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-amber-100 disabled:opacity-50 whitespace-nowrap leading-none">
+            {injecting==='USAGE_EVENT' ? <><div className="w-3.5 h-3.5 border-2 border-amber-700 border-t-transparent rounded-full animate-spin shrink-0"/><span>Injecting…</span></> : <><TrendingDown className="w-3.5 h-3.5 shrink-0"/>Inject Usage Drop (DAU 8)</>}
           </button>
-          <button onClick={()=>handleInject('SUPPORT_TICKET')} disabled={!!injecting} className="inline-flex items-center justify-center gap-1.5 border border-red-200 bg-red-50 text-red-700 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-red-100 disabled:opacity-50">
-            {injecting==='SUPPORT_TICKET' ? <><div className="w-3.5 h-3.5 border-2 border-red-700 border-t-transparent rounded-full animate-spin"/><span>Injecting…</span></> : <><FileText className="w-3.5 h-3.5"/>Inject Support Ticket (CRITICAL)</>}
+          <button onClick={()=>handleInject('SUPPORT_TICKET')} disabled={!!injecting} className="inline-flex items-center justify-center gap-1.5 border border-red-200 bg-red-50 text-red-700 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-red-100 disabled:opacity-50 whitespace-nowrap leading-none">
+            {injecting==='SUPPORT_TICKET' ? <><div className="w-3.5 h-3.5 border-2 border-red-700 border-t-transparent rounded-full animate-spin shrink-0"/><span>Injecting…</span></> : <><FileText className="w-3.5 h-3.5 shrink-0"/>Inject Support Ticket (CRITICAL)</>}
           </button>
-          <button onClick={()=>handleInject('CUSTOMER_FEEDBACK')} disabled={!!injecting} className="inline-flex items-center justify-center gap-1.5 border border-violet-200 bg-violet-50 text-violet-700 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-violet-100 disabled:opacity-50">
-            {injecting==='CUSTOMER_FEEDBACK' ? <><div className="w-3.5 h-3.5 border-2 border-violet-700 border-t-transparent rounded-full animate-spin"/><span>Injecting…</span></> : <><Mail className="w-3.5 h-3.5"/>Inject Negative Feedback (CSAT 2)</>}
+          <button onClick={()=>handleInject('CUSTOMER_FEEDBACK')} disabled={!!injecting} className="inline-flex items-center justify-center gap-1.5 border border-violet-200 bg-violet-50 text-violet-700 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-violet-100 disabled:opacity-50 whitespace-nowrap leading-none">
+            {injecting==='CUSTOMER_FEEDBACK' ? <><div className="w-3.5 h-3.5 border-2 border-violet-700 border-t-transparent rounded-full animate-spin shrink-0"/><span>Injecting…</span></> : <><Mail className="w-3.5 h-3.5 shrink-0"/>Inject Negative Feedback (CSAT 2)</>}
           </button>
         </div>
-        <div className="text-xs text-slate-500 mt-2">Each click <code className="bg-slate-100 px-1 py-0.5 rounded">POST /events</code> → <code className="bg-slate-100 px-1 py-0.5 rounded">SystemEventLog</code> → <code className="bg-slate-100 px-1 py-0.5 rounded">reassess_customer_risk</code> → timeline & signals update. Then <b>Run investigation</b> to see agent working (tools → report).</div>
+        <div className="text-xs text-slate-500 mt-2 leading-relaxed">Each click <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">POST /events</code> → <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">SystemEventLog</code> → <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">reassess_customer_risk</code> → timeline & signals update. Then <b>Run investigation</b> to see agent working (tools → report).</div>
       </Card>
 
       <Card>
@@ -273,11 +275,11 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
           </div>
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
             <div className="text-xs font-semibold">Account</div>
-            <div className="text-sm space-y-1.5">
-              <div className="flex justify-between text-xs"><span className="text-slate-500">CSM</span><span className="font-medium">{customer.csm_name}</span></div>
-              <div className="flex justify-between text-xs"><span className="text-slate-500">Email</span><span className="font-mono text-xs">{customer.csm_email}</span></div>
-              <div className="flex justify-between text-xs"><span className="text-slate-500">Segment</span><span>{customer.segment}</span></div>
-              <div className="flex justify-between text-xs"><span className="text-slate-500">Status</span><span>{customer.status||'ACTIVE'}</span></div>
+            <div className="text-sm space-y-1.5 min-w-0">
+              <div className="flex justify-between gap-2 text-xs min-w-0"><span className="text-slate-500 shrink-0">CSM</span><span className="font-medium truncate text-right min-w-0" title={customer.csm_name}>{customer.csm_name}</span></div>
+              <div className="flex justify-between gap-2 text-xs min-w-0"><span className="text-slate-500 shrink-0">Email</span><span className="font-mono text-xs truncate text-right min-w-0" title={customer.csm_email}>{customer.csm_email}</span></div>
+              <div className="flex justify-between gap-2 text-xs min-w-0"><span className="text-slate-500 shrink-0">Segment</span><span className="truncate text-right min-w-0" title={customer.segment}>{customer.segment}</span></div>
+              <div className="flex justify-between gap-2 text-xs min-w-0"><span className="text-slate-500 shrink-0">Status</span><span className="whitespace-nowrap shrink-0">{customer.status||'ACTIVE'}</span></div>
             </div>
             <div className="pt-3 border-t border-slate-200 space-y-1.5 text-xs">
               <div className="font-semibold">How to use this view</div>
@@ -440,11 +442,11 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
       <EvidenceDrawer ids={result?.investigation.evidence_ids||[]} open={drawerOpen} onClose={()=>setDrawerOpen(false)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 min-w-0">
           <SectionHeader title={`Timeline (${filteredTimeline.length})`} subtitle="Usage · Support · Feedback · Account · Risk changes · Interventions" icon={Clock} action={
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {['ALL','USAGE','SUPPORT','FEEDBACK','ACCOUNT'].map(f=>(
-                <button key={f} onClick={()=>setTimelineFilter(f)} className={`px-2 py-1 rounded-full text-xs border ${timelineFilter===f?'bg-slate-900 text-white border-slate-900':'bg-white text-slate-600 border-slate-200'}`}>{f}</button>
+                <button key={f} onClick={()=>setTimelineFilter(f)} className={`px-2.5 py-1 rounded-full text-xs border whitespace-nowrap leading-none shrink-0 ${timelineFilter===f?'bg-slate-900 text-white border-slate-900':'bg-white text-slate-600 border-slate-200'}`}>{f}</button>
               ))}
             </div>
           }/>
@@ -496,15 +498,15 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
           </Card>
           <Card>
             <div className="text-xs font-semibold">Lifecycle</div>
-            <div className="mt-2 flex items-center gap-1 text-[11px] font-mono">
+            <div className="mt-2 flex items-center gap-1 text-[11px] font-mono flex-wrap">
               {stepLabels.map((s,i)=>(
                 <React.Fragment key={s}>
-                  <span className={`px-2 py-1 rounded-full border transition ${i===stepIndex ? 'bg-slate-900 text-white border-slate-900 font-bold' : i<stepIndex ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white border-slate-200 text-slate-500'}`}>{s}</span>
-                  {i<4 && <ArrowRight className={`w-3 h-3 ${i<stepIndex ? 'text-emerald-500' : 'text-slate-400'}`}/>}
+                  <span className={`px-2 py-1 rounded-full border transition whitespace-nowrap leading-none shrink-0 ${i===stepIndex ? 'bg-slate-900 text-white border-slate-900 font-bold' : i<stepIndex ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white border-slate-200 text-slate-500'}`}>{s}</span>
+                  {i<4 && <ArrowRight className={`w-3 h-3 shrink-0 ${i<stepIndex ? 'text-emerald-500' : 'text-slate-400'}`}/>}
                 </React.Fragment>
               ))}
             </div>
-            <div className="text-xs text-slate-600 mt-2">
+            <div className="text-xs text-slate-600 mt-2 leading-relaxed">
               {stepIndex===0 && <>SENSE: inject or upload data.</>}
               {stepIndex===1 && <>THINK: signals found → run investigation.</>}
               {stepIndex===2 && <>ACT: plan ready → approve/reject.</>}

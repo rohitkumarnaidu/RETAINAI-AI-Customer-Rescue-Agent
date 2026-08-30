@@ -68,16 +68,16 @@ export const AuditView: React.FC = ()=>{
       </div>
 
       <Card>
-        <h3 className="text-sm font-semibold">Recent activity (chronological)</h3>
-        <div className="mt-3 space-y-2 max-h-[520px] overflow-auto pr-1">
+        <h3 className="text-sm font-semibold leading-tight">Recent activity (chronological)</h3>
+        <div className="mt-3 space-y-2 max-h-[520px] overflow-auto pr-1 scrollbar-thin">
           {events.length===0 ? <div className="text-xs text-slate-500">No activity yet — generate an investigation to populate the audit trail.</div> : events.map((e:any)=>(
-            <div key={e.id} className="border border-slate-200 rounded-lg p-3 flex items-center justify-between gap-3 bg-white">
-              <div>
-                <div className="text-xs font-mono text-slate-500">{new Date(e.ts).toLocaleString()} · {e.type}</div>
-                <div className="text-sm font-medium mt-0.5">{e.title}</div>
-                <div className="text-xs font-mono text-slate-400">{e.id}</div>
+            <div key={e.id} className="border border-slate-200 rounded-lg p-3 flex items-center justify-between gap-3 bg-white min-w-0">
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-mono text-slate-500 leading-tight truncate" title={`${new Date(e.ts).toLocaleString()} · ${e.type}`}>{new Date(e.ts).toLocaleString()} · {e.type}</div>
+                <div className="text-sm font-medium mt-0.5 leading-tight truncate" title={e.title}>{e.title}</div>
+                <div className="text-xs font-mono text-slate-400 truncate leading-tight" title={e.id}>{e.id}</div>
               </div>
-              <span className={`text-xs px-2 py-1 rounded-full border ${e.type==='OUTCOME'?'bg-slate-900 text-white border-slate-900':'bg-white border-slate-200'}`}>{e.type}</span>
+              <span className={`text-xs px-2 py-1 rounded-full border whitespace-nowrap shrink-0 leading-none ${e.type==='OUTCOME'?'bg-slate-900 text-white border-slate-900':'bg-white border-slate-200'}`}>{e.type}</span>
             </div>
           ))}
         </div>

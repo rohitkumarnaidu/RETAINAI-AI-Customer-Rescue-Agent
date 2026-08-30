@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { uploadCustomersCsv, createCustomer, getCustomerCsvTemplate } from '../services/api';
+import { saveUpload } from '../services/uploadHistory';
 import { Card, SectionHeader } from './ui';
 import { Upload, Download, FileSpreadsheet, X, CheckCircle2, AlertTriangle, Plus, Loader2, UserPlus, RefreshCw } from 'lucide-react';
 
@@ -195,6 +196,45 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
       const fileToUpload = remapped || file;
       const res = await uploadCustomersCsv(fileToUpload);
       setResult(res);
+      // — Persist complete CSV to Data Hub folder structure (tenant-isolated) —
+      try {
+        const tenantId = (()=>{ try{ return localStorage.getItem('retainai_tenant_id')||localStorage.getItem('retainai_tenantId')||'demo-tenant-001'}catch{return 'demo-tenant-001'}})();
+        // Determine effective headers/rows that were uploaded
+        let effectiveHeaders = previewHeaders;
+        let effectiveRows = fullRows;
+        let csvTextEffective = rawText;
+        if (remapped) {
+          // read remapped file text for storage (already built)
+          try {
+            csvTextEffective = await remapped.text();
+            const lines = csvTextEffective.split(/\r?\n/).filter(l=>l.trim());
+            if (lines.length>0) {
+              effectiveHeaders = lines[0].split(',').map(h=> h.replace(/^"|"$/g,'').trim());
+              effectiveRows = fullRows.map(r=>{
+                const obj: Record<string,string>={};
+                effectiveHeaders.forEach(h=>{
+                  const src = columnMapping[h as RetainField];
+                  obj[h]= r[src] ?? '';
+                });
+                return obj;
+              });
+            }
+          } catch {}
+        }
+        saveUpload({
+          filename: file.name,
+          headers: effectiveHeaders,
+          rows: effectiveRows,
+          csvText: csvTextEffective || rawText,
+          totalRows: fullRows.length,
+          created: (res as any).created ?? 0,
+          skipped: (res as any).skipped ?? 0,
+          sizeKB: file.size/1024,
+          remappedHeaders: showMapping ? (effectiveHeaders) : undefined,
+          backendResult: res,
+          tenantId,
+        });
+      } catch (e) { console.warn('persist upload history failed', e); }
       if ((res as unknown as {created:number}).created > 0 && onSuccess) onSuccess();
     } catch (e: unknown) {
       const err = e as {response?:{data?:{detail?:unknown;message?:unknown}};message?:string};
@@ -509,7 +549,7 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
               </div>
             </div>
           )}
-          {(result as {created:number}).created > 0 && <div className="text-xs text-slate-600 mt-2">Customers now visible in <b>Customers</b> and <b>Command Center</b>. Search by name/domain to find them. Run investigation in 360.</div>}
+          {(result as {created:number}).created > 0 && <div className="text-xs text-slate-600 mt-2">✓ Customers now visible in <b>Customers</b> → also <b>Data Hub → Customers</b> and <b>Data Hub → All</b> + <b>Command Center</b>. Search by name/domain. Run investigation in 360.</div>}
         </div>
       )}
 

@@ -61,17 +61,17 @@ export const LearningView: React.FC = ()=>{
                 const pct = Math.round(rate*100);
                 const isHigh = pct>=70 && total>=3;
                 return (
-                  <Card key={m.id||m.memory_id} className={isHigh ? 'border-emerald-200':''}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <span className="text-[11px] font-mono border border-slate-200 bg-slate-50 px-2 py-0.5 rounded-full">{m.customer_segment || m.industry_segment || 'General'}</span>
-                        <div className="text-sm font-semibold mt-2">{m.pattern || m.context_pattern || m.risk_pattern || 'Pattern'}</div>
-                        <div className="text-xs text-slate-500 mt-1">{m.risk_pattern || m.context_pattern || ''}</div>
+                  <Card key={m.id||m.memory_id} className={`min-w-0 ${isHigh ? 'border-emerald-200':''}`}>
+                    <div className="flex items-start justify-between gap-2 min-w-0">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[11px] font-mono border border-slate-200 bg-slate-50 px-2 py-0.5 rounded-full whitespace-nowrap">{m.customer_segment || m.industry_segment || 'General'}</span>
+                        <div className="text-sm font-semibold mt-2 leading-tight break-words">{m.pattern || m.context_pattern || m.risk_pattern || 'Pattern'}</div>
+                        <div className="text-xs text-slate-500 mt-1 leading-relaxed break-words">{m.risk_pattern || m.context_pattern || ''}</div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <div className="text-[11px] text-slate-500">Success rate</div>
-                        <div className={`text-lg font-bold font-mono ${isHigh?'text-emerald-700':'text-slate-800'}`}>{pct}%</div>
-                        <div className="text-[11px] text-slate-500">{success}/{total} cases</div>
+                      <div className="text-right shrink-0 ml-2">
+                        <div className="text-[11px] text-slate-500 leading-none">Success rate</div>
+                        <div className={`text-lg font-bold font-mono leading-none mt-1 ${isHigh?'text-emerald-700':'text-slate-800'}`}>{pct}%</div>
+                        <div className="text-[11px] text-slate-500 leading-none mt-1">{success}/{total} cases</div>
                       </div>
                     </div>
                     <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs leading-relaxed">

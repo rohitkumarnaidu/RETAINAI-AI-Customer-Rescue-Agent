@@ -33,3 +33,5 @@ chroma_data/
 # Logs
 *.log
 tmp/
+
+.vercel

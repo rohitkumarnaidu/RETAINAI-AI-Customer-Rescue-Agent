@@ -78,11 +78,11 @@ export const InterventionsView: React.FC = ()=>{
         {toast && <div className="mt-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-2 rounded-lg">{toast}</div>}
       </Card>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center gap-1.5 text-xs font-mono">
+      <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center gap-1.5 text-xs font-mono leading-none">
         {['RECOMMENDED','APPROVED','EXECUTED','MONITORING','OUTCOME','LEARNING','MEMORY'].map((s,i)=>(
           <React.Fragment key={s}>
-            <span className={`px-2 py-1 rounded-full border ${s==='OUTCOME' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 font-bold' : 'bg-slate-50 border-slate-200'}`}>{s}</span>
-            {i<6 && <ArrowRight className="w-3 h-3 text-slate-400"/>}
+            <span className={`px-2 py-1 rounded-full border whitespace-nowrap leading-none ${s==='OUTCOME' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 font-bold' : 'bg-slate-50 border-slate-200'}`}>{s}</span>
+            {i<6 && <ArrowRight className="w-3 h-3 text-slate-400 shrink-0"/>}
           </React.Fragment>
         ))}
       </div>
@@ -92,13 +92,13 @@ export const InterventionsView: React.FC = ()=>{
           {filtered.map((iv:any)=>{
             const oc = outcomeByIntervention.get(iv.id);
             return (
-              <Card key={iv.id} className="flex flex-col">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-semibold">{iv.title}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{iv.customer_id} · {iv.action_type} · Priority {iv.priority}</div>
+              <Card key={iv.id} className="flex flex-col min-w-0">
+                <div className="flex items-start justify-between gap-2 min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold leading-tight truncate" title={iv.title}>{iv.title}</div>
+                    <div className="text-xs text-slate-500 mt-0.5 leading-tight truncate" title={`${iv.customer_id} · ${iv.action_type} · Priority ${iv.priority}`}>{iv.customer_id} · {iv.action_type} · Priority {iv.priority}</div>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full border font-medium ${iv.status==='APPROVED'?'bg-emerald-50 border-emerald-200 text-emerald-700': iv.status==='REJECTED'?'bg-red-50 border-red-200 text-red-700':'bg-slate-50 border-slate-200 text-slate-700'}`}>{iv.status}</span>
+                  <span className={`text-xs px-2 py-1 rounded-full border font-medium whitespace-nowrap shrink-0 leading-none ${iv.status==='APPROVED'?'bg-emerald-50 border-emerald-200 text-emerald-700': iv.status==='REJECTED'?'bg-red-50 border-red-200 text-red-700':'bg-slate-50 border-slate-200 text-slate-700'}`}>{iv.status}</span>
                 </div>
                 <div className="text-xs text-slate-600 mt-2 line-clamp-2">{getPlanPreview(iv) || '—'}</div>
                 <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">Steps: {getPlanSteps(iv).length} · <Clock className="w-3 h-3"/>{new Date(iv.created_at).toLocaleString()}</div>

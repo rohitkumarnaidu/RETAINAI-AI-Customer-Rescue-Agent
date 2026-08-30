@@ -46,18 +46,18 @@ export const InvestigationsView: React.FC<{onSelectCustomer:(id:string)=>void}> 
 
       {runs.length===0 ? <EmptyState title="No investigations yet" description="Run an investigation from Customer 360 to generate an agent trace." /> : (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <div className="p-3 border-b border-slate-200 text-xs font-mono text-slate-500">{runs.length} runs</div>
-            <div className="divide-y divide-slate-100 max-h-[640px] overflow-auto">
+          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col min-h-[320px]">
+            <div className="p-3 border-b border-slate-200 text-xs font-mono text-slate-500 shrink-0">{runs.length} runs</div>
+            <div className="divide-y divide-slate-100 flex-1 overflow-auto max-h-[640px] scrollbar-thin">
               {runs.map((r:any)=>(
-                <button key={r.id} onClick={()=>openRun(r)} className={`w-full text-left p-3 hover:bg-slate-50 ${selectedRun?.id===r.id ? 'bg-slate-50':''}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-xs font-medium truncate">{r.id}</span>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full border ${r.status==='COMPLETED'?'bg-emerald-50 border-emerald-200 text-emerald-700':'bg-amber-50 border-amber-200 text-amber-700'}`}>{r.status}</span>
+                <button key={r.id} onClick={()=>openRun(r)} className={`w-full text-left p-3 hover:bg-slate-50 min-w-0 ${selectedRun?.id===r.id ? 'bg-slate-50 border-l-2 border-l-slate-900':''}`}>
+                  <div className="flex items-center justify-between gap-2 min-w-0">
+                    <span className="font-mono text-xs font-medium truncate min-w-0 flex-1" title={r.id}>{r.id}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${r.status==='COMPLETED'?'bg-emerald-50 border-emerald-200 text-emerald-700':'bg-amber-50 border-amber-200 text-amber-700'}`}>{r.status}</span>
                   </div>
-                  <div className="text-sm font-medium truncate mt-0.5">{r.customer_name}</div>
-                  <div className="text-xs text-slate-500 truncate">{r.output_summary||r.input_summary||'—'}</div>
-                  <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1"><Clock className="w-3 h-3"/>{new Date(r.started_at).toLocaleString()}</div>
+                  <div className="text-sm font-medium truncate mt-0.5 leading-tight" title={r.customer_name}>{r.customer_name}</div>
+                  <div className="text-xs text-slate-500 truncate leading-tight" title={r.output_summary||r.input_summary}>{r.output_summary||r.input_summary||'—'}</div>
+                  <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 leading-none"><Clock className="w-3 h-3 shrink-0"/>{new Date(r.started_at).toLocaleString()}</div>
                 </button>
               ))}
             </div>
