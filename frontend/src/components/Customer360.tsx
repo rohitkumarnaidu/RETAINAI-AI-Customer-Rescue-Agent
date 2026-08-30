@@ -4,6 +4,8 @@ import { RiskBadge, HealthRing, ConfidenceBadge } from './RiskBadge';
 import { Card, SectionHeader, Skeleton, ErrorState, EmptyState, EvidenceDrawer } from './ui';
 import { Building, Mail, Activity, Bot, FileText, ListOrdered, CheckCircle2, Clock, TrendingDown, ShieldAlert, Zap, ArrowRight, Sparkles, BarChart3, AlertCircle, Check, ChevronRight, Upload, Database, MessageCircle } from 'lucide-react';
 import { TelemetryUpload } from './TelemetryUpload';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 type TabNav = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit'|'onboarding'|'settings'|'analytics'|'datahub'|'chat';
 export const Customer360: React.FC<{customerId:string; onNavigate?: (tab: TabNav)=>void}> = ({customerId, onNavigate})=>{
@@ -370,8 +372,16 @@ export const Customer360: React.FC<{customerId:string; onNavigate?: (tab: TabNav
                 <div className="text-xs font-semibold tracking-wide uppercase text-slate-700 inline-flex items-center gap-1.5"><ShieldAlert className="w-4 h-4"/> Root cause</div>
                 <ConfidenceBadge confidence={result.investigation.confidence} uncertainty={result.investigation.uncertainty_status} />
               </div>
-              <div className="text-sm font-semibold mt-2">{result.investigation.root_cause}</div>
-              <div className="text-sm text-slate-700 leading-relaxed mt-1">{result.investigation.summary}</div>
+              <div className="text-sm font-semibold mt-2 break-words leading-relaxed">
+                <div className="markdown prose prose-sm max-w-none prose-p:my-1 prose-strong:font-semibold [&_p]:my-1">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{(result.investigation.root_cause||'').replace(/\*\*/g,'')}</ReactMarkdown>
+                </div>
+              </div>
+              <div className="text-sm text-slate-700 leading-relaxed mt-1 break-words">
+                <div className="markdown prose prose-sm max-w-none prose-p:my-1.5 [&_p]:my-1.5 prose-strong:font-semibold break-words">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.investigation.summary||''}</ReactMarkdown>
+                </div>
+              </div>
               {result.investigation.missing_evidence?.length>0 && (
                 <div className="mt-3 text-xs bg-white border border-amber-200 rounded-lg p-2.5">
                   <span className="font-semibold text-amber-800">Missing / weak evidence:</span> <span className="text-slate-600">{result.investigation.missing_evidence.join(' · ')}</span>
@@ -407,23 +417,31 @@ export const Customer360: React.FC<{customerId:string; onNavigate?: (tab: TabNav
                   <div className="text-xs text-slate-600 mt-1">{result.retention_plan.objective || result.retention_plan.description}</div>
                   <div className="text-xs mt-2 flex gap-2"><span className="border border-slate-200 bg-white px-2 py-0.5 rounded-full">{result.retention_plan.action_type}</span><span className="border border-slate-200 bg-white px-2 py-0.5 rounded-full">Priority {result.retention_plan.priority}</span></div>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 overflow-visible">
                   {result.retention_plan.plan_steps?.map((s:any,i:number)=>(
-                    <div key={i} className="flex gap-3 border border-slate-200 rounded-lg p-3 bg-white">
+                    <div key={i} className="flex gap-3 border border-slate-200 rounded-lg p-3 bg-white min-w-0 overflow-hidden">
                       <span className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shrink-0">{s.step||i+1}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{s.title}</span><span className="text-xs font-mono text-slate-500">Owner {s.owner}</span></div>
-                        <div className="text-xs text-slate-600 mt-0.5">{s.action}</div>
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 min-w-0"><span className="text-sm font-medium break-words leading-tight">{(s.title||'').replace(/\*\*/g,'')}</span><span className="text-xs font-mono text-slate-500 whitespace-nowrap shrink-0">Owner {s.owner}</span></div>
+                        <div className="text-xs text-slate-600 mt-0.5 break-words leading-relaxed">
+                          <div className="markdown prose prose-sm max-w-none prose-p:my-1 break-words [&_p]:my-1 [&_strong]:font-semibold">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{s.action||''}</ReactMarkdown>
+                          </div>
+                        </div>
                         {s.target_date && <div className="text-[11px] text-slate-400 mt-1">Target {s.target_date}</div>}
                       </div>
                     </div>
                   ))}
                 </div>
                 {result.retention_plan.draft_email && (
-                  <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3">
+                  <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3 overflow-hidden">
                     <div className="text-xs font-semibold flex items-center gap-1.5"><Mail className="w-3.5 h-3.5"/> Outreach email</div>
-                    <div className="text-xs font-medium mt-1">Subject: {result.retention_plan.draft_email.subject}</div>
-                    <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed mt-2 bg-slate-50 border border-slate-200 rounded p-2.5">{result.retention_plan.draft_email.body}</pre>
+                    <div className="text-xs font-medium mt-1 break-words">Subject: <span className="font-semibold">{(result.retention_plan.draft_email.subject||'').replace(/\*\*/g,'')}</span></div>
+                    <div className="text-xs text-slate-700 leading-relaxed mt-2 bg-slate-50 border border-slate-200 rounded p-2.5 overflow-hidden break-words">
+                      <div className="markdown prose prose-sm max-w-none prose-p:my-1.5 prose-p:leading-relaxed prose-strong:font-semibold prose-strong:text-slate-900 prose-ul:list-disc prose-ul:ml-4 prose-ul:my-1 prose-ol:list-decimal prose-ol:ml-4 prose-ol:my-1 prose-li:my-0.5 prose-h3:text-sm prose-h3:font-semibold prose-h3:mt-2 prose-h3:mb-1 [&_p]:my-1.5 [&_strong]:font-semibold [&_a]:text-blue-600 [&_a]:underline break-words">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.retention_plan.draft_email.body}</ReactMarkdown>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {/* MEASURE */}

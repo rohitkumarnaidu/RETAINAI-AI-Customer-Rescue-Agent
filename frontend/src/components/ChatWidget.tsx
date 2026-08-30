@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send, Sparkles, Zap, Users, BarChart3, Mail, Shield, Trash2, ChevronDown, Bot, Activity, Clock } from 'lucide-react';
 import { sendChat, streamChat, getChatConversations, getChatMessages, deleteChatConversation } from '../services/api';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 type Role = 'user' | 'assistant';
 type Msg = { id?:string; role: Role; content:string; evidence_ids?:string[]; traces?:any[]; streaming?:boolean };
@@ -279,8 +280,8 @@ export const ChatWidget: React.FC<{ customerId?:string; customerName?:string }> 
               <div key={idx} className={`flex ${m.role==='user'?'justify-end':'justify-start'}`}>
                 <div className={`max-w-[84%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed overflow-hidden break-words ${m.role==='user' ? 'bg-[#0F172A] text-white rounded-br-sm whitespace-pre-wrap' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm shadow-sm'}`}>
                   {m.role==='user' ? m.content : (
-                    <div className="markdown break-words [&_p]:my-1.5 [&_p]:leading-relaxed [&_strong]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:my-2 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px] [&_code]:break-all [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-auto [&_pre]:my-2 [&_pre]:text-xs">
-                      <ReactMarkdown>{m.content}</ReactMarkdown>
+                    <div className="markdown break-words [&_p]:my-1.5 [&_p]:leading-relaxed [&_strong]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:my-2 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px] [&_code]:break-all [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-auto [&_pre]:my-2 [&_pre]:text-xs [&_table]:w-full [&_table]:border [&_th]:bg-slate-50 [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-xs [&_td]:px-2 [&_td]:py-1.5 [&_td]:text-xs">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                     </div>
                   )}
                   {m.evidence_ids && m.evidence_ids.length>0 && (
@@ -302,8 +303,8 @@ export const ChatWidget: React.FC<{ customerId?:string; customerName?:string }> 
             {streamingText && (
               <div className="flex justify-start">
                 <div className="max-w-[84%] bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-3.5 py-2.5 text-sm leading-relaxed shadow-sm overflow-hidden break-words">
-                  <div className="markdown break-words [&_p]:my-1.5 [&_p]:leading-relaxed [&_strong]:font-semibold [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px] [&_code]:break-all [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-auto">
-                    <ReactMarkdown>{streamingText}</ReactMarkdown><span className="inline-block w-1.5 h-3 bg-slate-900 ml-1 animate-pulse align-middle"/>
+                  <div className="markdown break-words [&_p]:my-1.5 [&_p]:leading-relaxed [&_strong]:font-semibold [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px] [&_code]:break-all [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-auto [&_table]:w-full [&_table]:border [&_th]:bg-slate-50">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingText}</ReactMarkdown><span className="inline-block w-1.5 h-3 bg-slate-900 ml-1 animate-pulse align-middle"/>
                   </div>
                 </div>
               </div>

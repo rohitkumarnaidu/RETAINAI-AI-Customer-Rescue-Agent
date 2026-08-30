@@ -234,8 +234,8 @@ export const ChatView: React.FC<{ onSelectCustomer?:(id:string)=>void }> = ({onS
             {streamingText && (
               <div className="flex justify-start">
                 <div className="max-w-[78%] bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm leading-relaxed shadow-sm overflow-hidden break-words">
-                  <div className="markdown break-words [&_p]:my-1.5 [&_p]:leading-relaxed [&_strong]:font-semibold [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px] [&_code]:break-all [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-auto">
-                    <ReactMarkdown>{streamingText}</ReactMarkdown><span className="inline-block w-1.5 h-3 bg-slate-900 ml-1 animate-pulse align-middle"/>
+                  <div className="markdown break-words [&_p]:my-1.5 [&_p]:leading-relaxed [&_strong]:font-semibold [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px] [&_code]:break-all [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-auto [&_table]:w-full [&_table]:border [&_th]:bg-slate-50">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingText}</ReactMarkdown><span className="inline-block w-1.5 h-3 bg-slate-900 ml-1 animate-pulse align-middle"/>
                   </div>
                 </div>
               </div>
