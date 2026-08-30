@@ -75,7 +75,7 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
 
   const handleApprove = async()=>{
     const id=result?.intervention_id; if(!id) return;
-    try{ setApproving(true); await approveIntervention(id, customer?.csm_name||'CSM'); setApprovedId(id); setSuccess(`Approved ${id.slice(0,12)} — moved to MEASURE. Now record outcome after 14d window (or demo now).`); const [updated, _portfolio, _allInterventions] = await Promise.all([getCustomerInterventions(customerId).catch(()=>[]), (await import('../services/api')).getPortfolio().catch(()=>null), (await import('../services/api')).getAllInterventions().catch(()=>[])]); setInterventions(Array.isArray(updated)?updated:[]); }
+    try{ setApproving(true); await approveIntervention(id, customer?.csm_name||'CSM'); setApprovedId(id); setSuccess(`Approved ${id.slice(0,12)} — moved to MEASURE. Now record outcome after 14d window (or demo now).`); const updated = await getCustomerInterventions(customerId).catch(()=>[]); setInterventions(Array.isArray(updated)?updated:[]); }
     catch(e:any){ setError(e.message||'Approve failed'); }
     finally{ setApproving(false); }
   };
