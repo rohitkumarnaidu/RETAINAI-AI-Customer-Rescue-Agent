@@ -13,7 +13,7 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
   const [error, setError] = useState<string | null>(null);
   // Add single customer form
   const [showAddForm, setShowAddForm] = useState(false);
-  const [formData, setFormData] = useState({ name: '', domain: '', segment: 'MidMarket', industry: 'Software', plan: 'Growth Tier', arr: '36000', csm_name: 'Alex Morgan', csm_email: 'alex@retainai.io', health_score: '85', risk_level: '', renewal_date: '' });
+  const [formData, setFormData] = useState({ name: '', domain: '', segment: 'MidMarket', industry: 'Software', plan: 'Growth Tier', arr: '36000', csm_name: 'Alex Morgan', csm_email: 'alex@retainai.io', health_score: '', risk_level: '', renewal_date: '' });
   const [formSaving, setFormSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
@@ -73,7 +73,7 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
     } catch {
       // fallback client-side
       const headers = 'name,domain,segment,industry,plan,arr,mrr,csm_name,csm_email,health_score,risk_level,renewal_date,status';
-      const sample = 'Acme Corp,acme.com,Enterprise,FinTech,Enterprise Tier,180000,15000,Alex Morgan,alex@retainai.io,42,CRITICAL,2026-09-15,ACTIVE';
+      const sample = 'Example Corp,example.com,Enterprise,FinTech,Enterprise Tier,180000,15000,Alex Morgan,alex@retainai.io,42,CRITICAL,2026-09-15,ACTIVE';
       const blob = new Blob([headers + '\n' + sample + '\n'], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -137,11 +137,11 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-slate-700">Customer name *</label>
-                <input required value={formData.name} onChange={e => setFormData(d => ({ ...d, name: e.target.value }))} placeholder="Acme Corp" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-400" />
+                <input required value={formData.name} onChange={e => setFormData(d => ({ ...d, name: e.target.value }))} placeholder="Example Corp" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-slate-400" />
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-700">Domain</label>
-                <input value={formData.domain} onChange={e => setFormData(d => ({ ...d, domain: e.target.value }))} placeholder="acme.com (auto from name if empty)" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+                <input value={formData.domain} onChange={e => setFormData(d => ({ ...d, domain: e.target.value }))} placeholder="example.com (auto from name if empty)" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-700">Segment</label>
@@ -171,7 +171,7 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-700">Health score 0-100</label>
-                <input type="number" min={0} max={100} value={formData.health_score} onChange={e => setFormData(d => ({ ...d, health_score: e.target.value }))} placeholder="85" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min={0} max={100} value={formData.health_score} onChange={e => setFormData(d => ({ ...d, health_score: e.target.value }))} placeholder="— auto from risk if blank" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-700">Risk level (auto if empty)</label>
@@ -285,7 +285,7 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
       <div className="bg-slate-900 text-slate-300 rounded-xl p-4 text-xs leading-relaxed">
         <div className="font-semibold text-white text-xs">How CSV maps to RETAINAI</div>
         <div className="mt-1 font-mono text-[11px]">name* required — domain auto from name if blank — arr/mrr numeric — health_score 0-100 auto-sets risk_level — renewal_date YYYY-MM-DD defaults +90d — segment/industry/plan/csm_* optional</div>
-        <div className="mt-2 text-slate-400">Example: <code className="bg-slate-800 px-1 py-0.5 rounded text-slate-200">Acme Corp,acme.com,Enterprise,FinTech,Enterprise Tier,180000,,Alex Morgan,alex@retainai.io,42,CRITICAL,2026-09-15,ACTIVE</code></div>
+        <div className="mt-2 text-slate-400">Example: <code className="bg-slate-800 px-1 py-0.5 rounded text-slate-200">Example Corp,example.com,Enterprise,FinTech,Enterprise Tier,180000,,Alex Morgan,alex@retainai.io,42,CRITICAL,2026-09-15,ACTIVE</code></div>
       </div>
     </div>
   );

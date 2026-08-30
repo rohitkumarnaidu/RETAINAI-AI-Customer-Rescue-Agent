@@ -2,6 +2,7 @@
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timezone
+import json
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -132,11 +133,45 @@ class InterventionSchema(BaseModel):
     title: str
     description: str
     plan: str
+    plan_steps: Optional[List[Dict[str, Any]]] = None
+    draft_email: Optional[Dict[str, Any]] = None
+    priority: Optional[str] = None
     status: str
     created_at: datetime
     approved_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     approved_by: Optional[str] = None
+
+    @classmethod
+    def _parse_plan(cls, plan_value):
+        if not plan_value:
+            return []
+        if isinstance(plan_value, list):
+            return plan_value
+        if isinstance(plan_value, str):
+            try:
+                parsed = json.loads(plan_value)
+                if isinstance(parsed, list):
+                    return parsed
+                if isinstance(parsed, dict):
+                    # handle {"steps": [...]} or {"plan_steps": [...]}
+                    if "steps" in parsed and isinstance(parsed["steps"], list):
+                        return parsed["steps"]
+                    if "plan_steps" in parsed and isinstance(parsed["plan_steps"], list):
+                        return parsed["plan_steps"]
+                    # single step dict
+                    if "title" in parsed or "step" in parsed:
+                        return [parsed]
+                return []
+            except Exception:
+                return []
+        return []
+
+    def model_post_init(self, __context):
+        # auto-populate plan_steps from plan string if not provided
+        if self.plan_steps is None:
+            object.__setattr__(self, 'plan_steps', self._parse_plan(self.plan))
+        # also try to extract draft_email/priority if missing but stored elsewhere - keep tolerant
 
 
 class OutcomeCreateRequest(BaseModel):

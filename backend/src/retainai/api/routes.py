@@ -1,5 +1,6 @@
 """FastAPI REST API Routes for RETAINAI Customer Retention Platform."""
 
+import json
 import csv
 import io
 import re
@@ -563,7 +564,26 @@ async def get_agent_run(run_id: str, db: AsyncSession = Depends(get_db), user: d
 async def get_interventions(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Get interventions for customer."""
     service = InterventionService(db)
-    return await service.get_customer_interventions(customer_id)
+    interventions = await service.get_customer_interventions(customer_id)
+    for iv in interventions:
+        try:
+            raw = getattr(iv, 'plan', None)
+            steps = []
+            parsed = None
+            if isinstance(raw, str) and raw.strip():
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    steps = parsed
+                elif isinstance(parsed, dict) and isinstance(parsed.get('steps'), list):
+                    steps = parsed['steps']
+                elif isinstance(parsed, dict) and isinstance(parsed.get('plan_steps'), list):
+                    steps = parsed['plan_steps']
+            elif isinstance(raw, list):
+                steps = raw
+            setattr(iv, 'plan_steps', steps)
+        except Exception:
+            setattr(iv, 'plan_steps', [])
+    return interventions
 
 
 @router.post("/interventions", response_model=InterventionSchema)
@@ -743,7 +763,30 @@ async def list_all_interventions(
         query = query.where(Intervention.status == status)  # type: ignore
     query = query.order_by(Intervention.created_at.desc()).limit(limit).offset(offset)
     res = await db.execute(query)
-    return list(res.scalars().all())
+    interventions = list(res.scalars().all())
+    # Deserialize plan string to plan_steps for frontend dynamic rendering (Phase 0)
+    for iv in interventions:
+        try:
+            raw = getattr(iv, 'plan', None)
+            steps = []
+            if isinstance(raw, str) and raw.strip():
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    steps = parsed
+                elif isinstance(parsed, dict) and isinstance(parsed.get('steps'), list):
+                    steps = parsed['steps']
+                elif isinstance(parsed, dict) and isinstance(parsed.get('plan_steps'), list):
+                    steps = parsed['plan_steps']
+            elif isinstance(raw, list):
+                steps = raw
+            # attach as attribute for Pydantic serialization
+            setattr(iv, 'plan_steps', steps)
+            # also ensure draft_email/priority derived if present in plan
+            if not getattr(iv, 'draft_email', None) and isinstance(parsed if 'parsed' in locals() else None, dict) and parsed.get('draft_email'):
+                setattr(iv, 'draft_email', parsed.get('draft_email'))
+        except Exception:
+            setattr(iv, 'plan_steps', [])
+    return interventions
 
 
 @router.get("/outcomes", response_model=List[OutcomeSchema])

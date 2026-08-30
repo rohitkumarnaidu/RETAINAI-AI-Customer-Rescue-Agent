@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { getCustomerById, getCustomerTimeline, getCustomerRisk, runInvestigation, approveIntervention, rejectIntervention, getCustomerSignals, getCustomerMemory, getCustomerInterventions, getAgentRuns, ingestEvent } from '../services/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { getCustomerById, getCustomerTimeline, getCustomerRisk, runInvestigation, approveIntervention, rejectIntervention, getCustomerSignals, getCustomerMemory, getCustomerInterventions, getAgentRuns, ingestEvent, recordOutcome } from '../services/api';
 import { RiskBadge, HealthRing, ConfidenceBadge } from './RiskBadge';
 import { Card, SectionHeader, Skeleton, ErrorState, EmptyState, EvidenceDrawer } from './ui';
-import { Building, Mail, Activity, Bot, FileText, ListOrdered, CheckCircle2, Clock, TrendingDown, ShieldAlert, Zap, ArrowRight, Sparkles } from 'lucide-react';
+import { Building, Mail, Activity, Bot, FileText, ListOrdered, CheckCircle2, Clock, TrendingDown, ShieldAlert, Zap, ArrowRight, Sparkles, BarChart3, AlertCircle, Check, ChevronRight } from 'lucide-react';
 
 export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
   const [customer,setCustomer]=useState<any>(null);
@@ -16,15 +16,26 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
   const [investigating,setInvestigating]=useState(false);
   const [result,setResult]=useState<any>(null);
   const [error,setError]=useState<string|null>(null);
+  const [success,setSuccess]=useState<string|null>(null);
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [approving,setApproving]=useState(false);
   const [approvedId,setApprovedId]=useState<string|null>(null);
   const [timelineFilter,setTimelineFilter]=useState<string>('ALL');
   const [injecting,setInjecting]=useState<string|null>(null);
+  // Measure — outcome recording
+  const [showOutcomeForm,setShowOutcomeForm]=useState(false);
+  const [healthAfter,setHealthAfter]=useState<string>('');
+  const [usageAfter,setUsageAfter]=useState<string>('');
+  const [customerResponse,setCustomerResponse]=useState('POSITIVE');
+  const [outcomeNotes,setOutcomeNotes]=useState('');
+  const [recording,setRecording]=useState(false);
+  const [outcomeError,setOutcomeError]=useState<string|null>(null);
+  const [outcomeSuccess,setOutcomeSuccess]=useState<any>(null);
+  const investigationRef = useRef<HTMLDivElement>(null);
 
   const load = async()=>{
     try{
-      setLoading(true); setError(null); setResult(null);
+      setLoading(true); setError(null); setSuccess(null); setResult(null); setApprovedId(null); setOutcomeSuccess(null);
       const [cust, tl, riskResp, sigs, mems, inters, agRuns] = await Promise.all([
         getCustomerById(customerId),
         getCustomerTimeline(customerId,60).catch(()=>[]),
@@ -35,16 +46,21 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
         getAgentRuns(customerId).catch(()=>[]),
       ]);
       setCustomer(cust); setTimeline(tl); setRisk(riskResp); setSignals(Array.isArray(sigs)?sigs:[]); setMemory(Array.isArray(mems)?mems:[]); setInterventions(Array.isArray(inters)?inters:[]); setRuns(Array.isArray(agRuns)?agRuns:[]);
+      // detect already approved intervention
+      const approved = (inters as any[]).find((iv:any)=> iv.status==='APPROVED' || iv.status==='COMPLETED');
+      if(approved) setApprovedId(approved.id);
     } catch(e:any){ setError(e.message||'Failed to load'); }
     finally{ setLoading(false); }
   };
   useEffect(()=>{ load(); },[customerId]);
+  useEffect(()=>{ if(success){ const id=setTimeout(()=>setSuccess(null),4000); return ()=>clearTimeout(id);}},[success]);
 
   const handleInvestigate = async()=>{
     try{
-      setInvestigating(true); setError(null);
+      setInvestigating(true); setError(null); setSuccess(null);
       const r = await runInvestigation(customerId);
       setResult(r);
+      setSuccess(`Investigation ${r.run_id} completed — root cause identified with ${r.investigation.evidence_ids?.length||0} evidence items`);
       const [updatedRisk, updatedTl, updatedRuns, updatedInters] = await Promise.all([
         getCustomerRisk(customerId).catch(()=>null),
         getCustomerTimeline(customerId,60).catch(()=>[]),
@@ -52,23 +68,24 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
         getCustomerInterventions(customerId).catch(()=>[]),
       ]);
       setRisk(updatedRisk); setTimeline(updatedTl); setRuns(Array.isArray(updatedRuns)?updatedRuns:[]); setInterventions(Array.isArray(updatedInters)?updatedInters:[]);
+      setTimeout(()=> investigationRef.current?.scrollIntoView({behavior:'smooth', block:'start'}), 100);
     } catch(e:any){ setError(e.message||'Investigation failed'); }
     finally{ setInvestigating(false); }
   };
 
   const handleApprove = async()=>{
     const id=result?.intervention_id; if(!id) return;
-    try{ setApproving(true); await approveIntervention(id, customer?.csm_name||'CSM'); setApprovedId(id); const updated=await getCustomerInterventions(customerId).catch(()=>[]); setInterventions(Array.isArray(updated)?updated:[]); }
+    try{ setApproving(true); await approveIntervention(id, customer?.csm_name||'CSM'); setApprovedId(id); setSuccess(`Approved ${id.slice(0,12)} — moved to MEASURE. Now record outcome after 14d window (or demo now).`); const [updated, _portfolio, _allInterventions] = await Promise.all([getCustomerInterventions(customerId).catch(()=>[]), (await import('../services/api')).getPortfolio().catch(()=>null), (await import('../services/api')).getAllInterventions().catch(()=>[])]); setInterventions(Array.isArray(updated)?updated:[]); }
     catch(e:any){ setError(e.message||'Approve failed'); }
     finally{ setApproving(false); }
   };
   const handleReject = async()=>{
     const id=result?.intervention_id; if(!id) return;
-    try{ await rejectIntervention(id, 'Not relevant for this account', customer?.csm_name||'CSM'); setResult(null); setError('Recommendation rejected — feedback captured for learning'); }
+    try{ await rejectIntervention(id, 'Not relevant for this account', customer?.csm_name||'CSM'); setResult(null); setSuccess('Recommendation rejected — feedback captured for learning (loop: FEEDBACK → LEARN)'); }
     catch(e:any){ setError(e.message||'Reject failed'); }
   };
   const handleInject = async(type:string)=>{
-    setInjecting(type); setError(null);
+    setInjecting(type); setError(null); setSuccess(null);
     try{
       let payload:any={};
       if(type==='USAGE_EVENT') payload={daily_active_users: 8+Math.floor(Math.random()*5), license_utilization:0.12, feature_clicks:12, sessions:9, id:`usg_live_${Date.now()}`};
@@ -77,30 +94,89 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
       const res = await ingestEvent(customerId, type, payload);
       const [updatedRisk, updatedTl, updatedSignals] = await Promise.all([getCustomerRisk(customerId).catch(()=>null), getCustomerTimeline(customerId,60).catch(()=>[]), getCustomerSignals(customerId).catch(()=>[])]);
       setRisk(updatedRisk); setTimeline(updatedTl); setSignals(Array.isArray(updatedSignals)?updatedSignals:updatedSignals as any);
-      setError(`Injected ${type} → ${res.status} (health ${updatedRisk?.health_score ?? '—'} ${updatedRisk?.risk_level ?? ''}) — now Run investigation to see new report with tools`);
+      setSuccess(`Injected ${type} → ${res.status} (health ${updatedRisk?.health_score ?? '—'} ${updatedRisk?.risk_level ?? ''}) — now click Run investigation`);
     }catch(e:any){ setError(e.message||'Inject failed');}
     finally{ setInjecting(null); }
   };
 
+  const handleRecordOutcome = async(e:React.FormEvent)=>{
+    e.preventDefault();
+    const targetId = approvedId || result?.intervention_id || interventions.find((iv:any)=>iv.status==='APPROVED')?.id;
+    if(!targetId){ setOutcomeError('No approved intervention to measure'); return; }
+    const before = Number(risk?.health_score ?? customer?.health_score ?? 70);
+    const after = Number(healthAfter);
+    if(Number.isNaN(after) || after<0 || after>100){ setOutcomeError('Health after must be 0-100'); return; }
+    setRecording(true); setOutcomeError(null);
+    try{
+      const oc = await recordOutcome(targetId, { health_before: before, health_after: after, usage_before: 50, usage_after: Number(usageAfter) || after, customer_response: customerResponse, notes: outcomeNotes });
+      setOutcomeSuccess(oc);
+      setSuccess(`Outcome recorded: ${before} → ${after} (Δ ${oc.health_delta>0?'+':''}${oc.health_delta}) Status ${oc.status} — ${oc.status==='SUCCESS' ? 'Validated memory created (LEARN)' : 'No memory (neutral/failed)'} `);
+      setShowOutcomeForm(false);
+      // refresh
+      const [updatedInters] = await Promise.all([getCustomerInterventions(customerId).catch(()=>[])]);
+      setInterventions(Array.isArray(updatedInters)?updatedInters:[]);
+      // also refresh risk
+      const nr = await getCustomerRisk(customerId).catch(()=>null); if(nr) setRisk(nr);
+    }catch(er:any){ setOutcomeError(er?.response?.data?.detail || er.message || 'Record failed'); }
+    finally{ setRecording(false); }
+  };
+
   if(loading) return <div className="space-y-4"><div className="bg-white border border-slate-200 rounded-xl p-6 space-y-3"><Skeleton className="h-6 w-1/3"/><Skeleton className="h-4 w-full"/><Skeleton className="h-4 w-2/3"/></div><div className="grid grid-cols-3 gap-4">{[1,2,3].map(i=><Card key={i}><Skeleton className="h-20 w-full"/></Card>)}</div></div>;
   if(!customer) return <EmptyState title="Customer not found" description="Select an account from Command Center or Customers." />;
-  // riskLevel: no fake fallback — show "—" if unknown (avoid misleading 'WATCH'/'HEALTHY' when no risk assessment exists)
   const riskLevel = (risk?.risk_level as string | undefined) ?? null;
-  // healthScore: no magic 85 — show "—" / skeleton when neither risk nor customer provides a score
   const rawHealthScore = risk?.health_score ?? customer.health_score ?? null;
   const healthScore = rawHealthScore != null ? Number(rawHealthScore) : null;
   const hasHealthScore = healthScore != null && !Number.isNaN(healthScore);
   const healthComps = risk?.health_components || {};
-  const rootCause = risk?.primary_root_cause || risk?.root_cause || 'No severe risk detected';
-  const reasoning = risk?.reasoning_summary || 'Telemetry within nominal ranges.';
+  const rootCause = (risk?.primary_root_cause ?? risk?.root_cause ?? (signals.length>0 ? (signals[0]?.summary || signals[0]?.description || signals[0]?.signal_type) : null) ?? '—');
+  const reasoning = risk?.reasoning_summary ?? (risk?.explanation as string | undefined) ?? '—';
+  const derivedConfidence = risk?.confidence ?? (signals.length ? Math.min(0.95, 0.65 + signals.length*0.08) : null);
+  const showInsufficientEvidence = !hasHealthScore || !risk || riskLevel==null;
   const filteredTimeline = timeline.filter((e:any)=>{
     if(timelineFilter==='ALL') return true;
     const src=(e.source||e.type||'').toUpperCase();
     return src.includes(timelineFilter);
   });
 
+  // Dynamic lifecycle: 0 SENSE, 1 THINK, 2 ACT, 3 MEASURE, 4 LEARN
+  const hasSignal = signals.length>0;
+  const hasResult = !!result;
+  const hasApproved = !!approvedId || interventions.some((iv:any)=>['APPROVED','COMPLETED','EXECUTED'].includes(iv.status));
+  const hasMeasured = !!outcomeSuccess;
+  const stepIndex = hasMeasured ? 4 : hasApproved ? 3 : hasResult ? 2 : hasSignal ? 1 : 0;
+  const stepLabels = ['SENSE','THINK','ACT','MEASURE','LEARN'];
+  const stepDescs = ['Telemetry ingested','Investigating evidence','Awaiting approval','Measuring outcome','Learning validated'];
+
   return (
     <div className="space-y-5">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
+        <span>Customers</span> <ChevronRight className="w-3 h-3"/> <span className="text-slate-700 font-medium">{customer.name}</span> <span className="text-slate-400">· 360</span>
+      </div>
+
+      {/* Stepper */}
+      <div className="bg-white border border-slate-200 rounded-xl p-3">
+        <div className="flex items-center justify-between gap-1">
+          {stepLabels.map((s,i)=>(
+            <React.Fragment key={s}>
+              <div className="flex flex-col items-center gap-1 flex-1">
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border ${i<stepIndex ? 'bg-emerald-600 text-white border-emerald-600' : i===stepIndex ? 'bg-slate-900 text-white border-slate-900 animate-pulse' : 'bg-white border-slate-200 text-slate-500'}`}>{i<stepIndex ? <Check className="w-3.5 h-3.5"/> : i+1}</span>
+                <span className={`text-[11px] font-mono font-medium ${i===stepIndex ? 'text-slate-900' : i<stepIndex ? 'text-emerald-700' : 'text-slate-500'}`}>{s}</span>
+                <span className="text-[11px] text-slate-400 hidden sm:block">{stepDescs[i]}</span>
+              </div>
+              {i<4 && <div className={`flex-1 h-0.5 mx-1 ${i<stepIndex ? 'bg-emerald-600' : 'bg-slate-200'}`} />}
+            </React.Fragment>
+          ))}
+        </div>
+        <div className="text-xs text-slate-600 mt-2 text-center">
+          {stepIndex===0 && <>Start in <b>SENSE</b>: inject live data or import CSV, then run investigation</>}
+          {stepIndex===1 && <>Signals detected — run <b>THINK</b>: click <b>Run investigation</b></>}
+          {stepIndex===2 && <>Plan ready in <b>ACT</b>: approve or reject the recommendation</>}
+          {stepIndex===3 && <>Approved — in <b>MEASURE</b>: record outcome after 14d (or demo now via <b>Record Outcome</b>)</>}
+          {stepIndex===4 && <>Outcome measured — <b>LEARN</b> validated. Loop restarts at SENSE.</>}
+        </div>
+      </div>
+
       <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {hasHealthScore ? <HealthRing score={healthScore!} size={64} /> : <div className="w-[64px] h-[64px] rounded-full border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-xl" aria-label="Health score unavailable">—</div>}
@@ -126,6 +202,16 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
         </div>
       </div>
       {error && <ErrorState message={error} onRetry={load} />}
+      {showInsufficientEvidence && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+          <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <div className="text-sm font-semibold text-amber-800">INSUFFICIENT_EVIDENCE — sparse telemetry</div>
+            <div className="text-xs text-amber-700 mt-1 leading-relaxed">Health score unavailable and risk assessment missing. Inject live data or run investigation once telemetry exists. Showing “—” instead of fabricated value.</div>
+          </div>
+        </div>
+      )}
+      {success && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-3 py-2.5 rounded-lg flex items-start gap-2"><CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0"/><span>{success}</span></div>}
 
       <Card>
         <SectionHeader title="Inject Live Data (SENSE)" subtitle="Add real telemetry — DB persists, health/risk reassesses instantly, then Run investigation to see agent tools + report" icon={Zap} />
@@ -150,13 +236,20 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
             <div className="flex items-baseline gap-3">
               <span className="text-3xl font-semibold">{hasHealthScore ? Math.round(healthScore!) : "—"}<span className="text-sm font-normal text-slate-400">/100</span></span>
               <span className="text-sm flex items-center gap-1 text-slate-600"><TrendingDown className="w-4 h-4"/> {riskLevel ?? "—"}</span>
-              {risk?.confidence !==undefined && <span className="text-xs font-mono text-slate-500">Confidence {(risk.confidence*100).toFixed(0)}%</span>}
+              {derivedConfidence!=null ? <span className="text-xs font-mono text-slate-500">Confidence {(derivedConfidence*100).toFixed(0)}%</span> : <span className="text-xs font-mono text-slate-400">Confidence —</span>}
             </div>
-            <div className="mt-3">
-              <div className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Primary root cause</div>
-              <div className="text-sm font-semibold text-slate-900 mt-1">{rootCause}</div>
-              <div className="text-sm text-slate-600 leading-relaxed mt-1">{reasoning}</div>
-            </div>
+            {rootCause==="—" && reasoning==="—" ? (
+              <div className="mt-3">
+                <EmptyState title="No risk signal" description="No root cause or reasoning available — signals will appear after telemetry is ingested and risk is reassessed." />
+              </div>
+            ) : (
+              <div className="mt-3">
+                <div className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Primary root cause</div>
+                <div className="text-sm font-semibold text-slate-900 mt-1">{rootCause==="—" ? "—" : rootCause}</div>
+                <div className="text-sm text-slate-600 leading-relaxed mt-1">{reasoning==="—" ? "—" : reasoning}</div>
+                {rootCause==="—" && <div className="text-xs text-slate-500 mt-1">Fallback: no severe risk text suppressed — showing “—” per dynamic honesty rule.</div>}
+              </div>
+            )}
             {risk?.health_components && (
               <div className="grid grid-cols-4 gap-2 mt-4">
                 {Object.entries(healthComps).map(([k,v]:any)=>(
@@ -194,6 +287,7 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
         </div>
       </Card>
 
+      <div ref={investigationRef} />
       <Card>
         <SectionHeader title="Investigation" subtitle={result ? `Run ${result.run_id} · ${result.investigation?.uncertainty_status||'READY'}` : 'Run investigation to generate evidence-grounded diagnosis'} icon={Bot} action={result && <button onClick={()=>setDrawerOpen(true)} className="text-xs border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"><FileText className="w-3.5 h-3.5"/>Evidence ({result.investigation.evidence_ids?.length||0})</button>} />
         {!result ? (
@@ -280,10 +374,40 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
                     <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed mt-2 bg-slate-50 border border-slate-200 rounded p-2.5">{result.retention_plan.draft_email.body}</pre>
                   </div>
                 )}
+                {/* MEASURE */}
+                {approvedId && !outcomeSuccess && (
+                  <div className="mt-4 border-t border-slate-200 pt-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold flex items-center gap-1.5"><BarChart3 className="w-4 h-4"/> MEASURE: Record outcome</div>
+                      <button onClick={()=>setShowOutcomeForm(v=>!v)} className={`text-xs px-3 py-1.5 rounded-lg border font-medium ${showOutcomeForm?'bg-slate-900 text-white border-slate-900':'bg-white hover:bg-slate-50'}`}>{showOutcomeForm ? 'Cancel' : 'Record Outcome'}</button>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">After intervention, measure health delta. In production this is 14d; demo allows immediate recording. <b>Success = Δ≥15 → Validated memory (LEARN)</b></p>
+                    {showOutcomeForm && (
+                      <form onSubmit={handleRecordOutcome} className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div><label className="text-xs font-medium">Health before</label><input value={String(risk?.health_score ?? customer.health_score ?? 70)} readOnly className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-slate-100"/><div className="text-[11px] text-slate-500">Current health</div></div>
+                          <div><label className="text-xs font-medium">Health after *</label><input type="number" min={0} max={100} required value={healthAfter} onChange={e=>setHealthAfter(e.target.value)} placeholder="e.g. 78" className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"/><div className="text-[11px] text-slate-500">0-100 after intervention</div></div>
+                          <div><label className="text-xs font-medium">Usage after</label><input type="number" min={0} max={100} value={usageAfter} onChange={e=>setUsageAfter(e.target.value)} placeholder="auto = health after" className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"/></div>
+                          <div><label className="text-xs font-medium">Customer response</label><select value={customerResponse} onChange={e=>setCustomerResponse(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white"><option>POSITIVE</option><option>NEUTRAL</option><option>NEGATIVE</option></select></div>
+                        </div>
+                        <div><label className="text-xs font-medium">Notes</label><textarea value={outcomeNotes} onChange={e=>setOutcomeNotes(e.target.value)} placeholder="What was done, customer feedback..." rows={2} className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"/></div>
+                        {outcomeError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs px-2 py-1.5 rounded-lg flex gap-1.5"><AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0"/>{outcomeError}</div>}
+                        <button type="submit" disabled={recording} className="inline-flex items-center gap-1.5 bg-[#0F172A] text-white px-4 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-800 disabled:opacity-50">{recording ? <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/>Recording...</> : <><BarChart3 className="w-3.5 h-3.5"/>Submit outcome</>}</button>
+                      </form>
+                    )}
+                    {outcomeSuccess && <div className="mt-2 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-1.5 rounded-lg">Outcome {outcomeSuccess.status} Δ {outcomeSuccess.health_delta} → Learning updated</div>}
+                  </div>
+                )}
+                {outcomeSuccess && (
+                  <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                    <div className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5"><Check className="w-3.5 h-3.5"/> Outcome measured — {outcomeSuccess.status}</div>
+                    <div className="text-xs text-emerald-700 mt-1">Health {outcomeSuccess.health_before} → {outcomeSuccess.health_after} (Δ {outcomeSuccess.health_delta>0?'+':''}{outcomeSuccess.health_delta}) · {outcomeSuccess.status==='SUCCESS' ? 'Validated memory created — future recommendations improved' : 'Neutral/failed — no memory, but feedback recorded'}</div>
+                  </div>
+                )}
                 <div className="mt-3 text-xs text-slate-500">Evidence, interpretation, recommendation, action, outcome, learning — keep them distinct. Human approval required before execution.</div>
               </div>
             )}
-            {/* Agent working trace — how it got the report */}
+            {/* Agent working trace */}
             <div className="border border-slate-200 rounded-lg p-3 bg-white">
               <div className="text-xs font-semibold flex items-center gap-1.5"><Activity className="w-3.5 h-3.5"/> Agent trace — how the report was produced (tools → state transitions)</div>
               <div className="mt-2 space-y-1 max-h-40 overflow-auto pr-1">
@@ -347,8 +471,8 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
             {interventions.length===0 ? <div className="text-xs text-slate-500">No interventions yet. Run investigation to generate a plan.</div> : (
               <div className="space-y-2 max-h-[260px] overflow-auto pr-1">
                 {interventions.slice(0,6).map((iv:any)=>(
-                  <div key={iv.id} className="border border-slate-200 rounded-lg p-3">
-                    <div className="flex items-center justify-between gap-2"><span className="text-sm font-medium truncate">{iv.title}</span><span className="text-[11px] border border-slate-200 px-2 py-0.5 rounded-full">{iv.status}</span></div>
+                  <div key={iv.id} className="border border-slate-200 rounded-lg p-3 hover:bg-slate-50 cursor-pointer" onClick={()=>{ if(iv.status==='APPROVED'){ setShowOutcomeForm(true); investigationRef.current?.scrollIntoView({behavior:'smooth'});} }}>
+                    <div className="flex items-center justify-between gap-2"><span className="text-sm font-medium truncate">{iv.title}</span><span className={`text-[11px] border px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${iv.status==='APPROVED'?'bg-emerald-50 border-emerald-200 text-emerald-700': iv.status==='REJECTED'?'bg-red-50 border-red-200 text-red-700':'bg-slate-50 border-slate-200'}`}>{iv.status}</span></div>
                     <div className="text-xs text-slate-600 mt-1 truncate">{iv.description||iv.plan||''}</div>
                     <div className="text-[11px] text-slate-400 mt-1">{new Date(iv.created_at).toLocaleDateString()} · {iv.action_type}</div>
                   </div>
@@ -358,7 +482,7 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
           </Card>
           <Card>
             <SectionHeader title="Relevant experience" subtitle="Validated patterns for this segment" icon={Zap} />
-            {memory.length===0 ? <div className="text-xs text-slate-500">No validated memories for {customer.segment} yet.</div> : (
+            {memory.length===0 ? <div className="text-xs text-slate-500">No validated memories for {customer.segment} yet. <span className="text-slate-400">Complete MEASURE to build memory.</span></div> : (
               <div className="space-y-2">
                 {memory.slice(0,3).map((m:any)=>(
                   <div key={m.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
@@ -373,14 +497,21 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
           <Card>
             <div className="text-xs font-semibold">Lifecycle</div>
             <div className="mt-2 flex items-center gap-1 text-[11px] font-mono">
-              {['SENSE','THINK','ACT','MEASURE','LEARN'].map((s,i)=>(
+              {stepLabels.map((s,i)=>(
                 <React.Fragment key={s}>
-                  <span className={`px-2 py-1 rounded-full border ${i===1 ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200'}`}>{s}</span>
-                  {i<4 && <ArrowRight className="w-3 h-3 text-slate-400"/>}
+                  <span className={`px-2 py-1 rounded-full border transition ${i===stepIndex ? 'bg-slate-900 text-white border-slate-900 font-bold' : i<stepIndex ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white border-slate-200 text-slate-500'}`}>{s}</span>
+                  {i<4 && <ArrowRight className={`w-3 h-3 ${i<stepIndex ? 'text-emerald-500' : 'text-slate-400'}`}/>}
                 </React.Fragment>
               ))}
             </div>
-            <div className="text-xs text-slate-600 mt-2">You are in THINK → ACT. Approve to move to MEASURE.</div>
+            <div className="text-xs text-slate-600 mt-2">
+              {stepIndex===0 && <>SENSE: inject or upload data.</>}
+              {stepIndex===1 && <>THINK: signals found → run investigation.</>}
+              {stepIndex===2 && <>ACT: plan ready → approve/reject.</>}
+              {stepIndex===3 && <>MEASURE: record outcome below.</>}
+              {stepIndex===4 && <>LEARN: outcome validated — repeat from SENSE.</>}
+              <span className="text-slate-400"> Step {stepIndex+1}/5</span>
+            </div>
           </Card>
         </div>
       </div>

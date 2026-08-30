@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getPortfolio } from '../services/api';
 import { RiskBadge, HealthRing } from './RiskBadge';
-import { Card, SkeletonCard, ErrorState } from './ui';
+import { Card, SkeletonCard, ErrorState, EmptyState } from './ui';
 import { ArrowUpRight, TrendingDown, ShieldAlert, Activity, Clock, Search, Filter, Upload, FileSpreadsheet } from 'lucide-react';
 
 export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({onSelectCustomer})=>{
@@ -37,7 +37,13 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
   const healthy = customers.filter((c:any)=>c.risk_level==='HEALTHY');
   const totalARR = customers.reduce((s:any,c:any)=>s+(c.arr||0),0);
   const atRiskARR = [...critical,...watch].reduce((s:any,c:any)=>s+(c.arr||0),0);
-  const acme = customers.find((c:any)=>c.id==='acme-corp-001' || c.name.toLowerCase().includes('acme'));
+  const hero = (()=>{
+    if(customers.length===0) return null;
+    const crit = customers.find((c:any)=>c.risk_level==='CRITICAL');
+    if(crit) return crit;
+    const order:any={CRITICAL:0,HIGH_RISK:1,AT_RISK:2,WATCH:3,STABLE:4,HEALTHY:5};
+    return [...customers].sort((a:any,b:any)=>(order[a.risk_level]??9)-(order[b.risk_level]??9) || (a.health_score-b.health_score))[0] || null;
+  })();
 
   if(loading) return <div aria-live="polite" aria-busy="true" className="grid grid-cols-1 lg:grid-cols-4 gap-4">{[1,2,3,4].map(i=><SkeletonCard key={i}/>)}</div>;
   if(error) return <ErrorState message={error} onRetry={load} />;
@@ -56,13 +62,20 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
           <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5"><FileSpreadsheet className="w-3 h-3" /> Have your own data? Go to <b>Customers</b> → <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium"><Upload className="w-3 h-3" /> Import CSV / Add customer</span> — now supports live data, not just demo 101.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={()=> acme && onSelectCustomer(acme.id)} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800">
-            Open Acme 360 <ArrowUpRight className="w-4 h-4" />
-          </button>
+          {hero ? (
+            <button onClick={()=> hero && onSelectCustomer(hero.id)} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800">
+              Open highest risk 360 <ArrowUpRight className="w-4 h-4" />
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-2 bg-slate-100 text-slate-500 px-4 py-2 rounded-lg text-sm font-medium border border-dashed border-slate-300">— No hero</span>
+          )}
           <button onClick={load} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 rounded-lg text-sm hover:bg-slate-50"><Clock className="w-4 h-4 text-slate-500"/>Refresh</button>
         </div>
       </div>
 
+      {customers.length===0 && (
+        <EmptyState title="No customers yet" description="No accounts in portfolio. Use Customers tab to import CSV or add a customer, then health/risk will compute dynamically." />
+      )}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <div className="text-xs font-mono text-slate-500">TOTAL ARR</div>
@@ -145,11 +158,10 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((c:any)=>{
-                  const isAcme=c.name.toLowerCase().includes('acme');
                   return (
-                    <tr key={c.id} onClick={()=>onSelectCustomer(c.id)} role="button" tabIndex={0} onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); onSelectCustomer(c.id); } }} className={`hover:bg-slate-50 cursor-pointer ${isAcme ? 'bg-amber-50/60':''}`}>
+                    <tr key={c.id} onClick={()=>onSelectCustomer(c.id)} role="button" tabIndex={0} onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); onSelectCustomer(c.id); } }} className={`hover:bg-slate-50 cursor-pointer`}>
                       <td className="p-3">
-                        <div className="font-medium flex items-center gap-1.5">{c.name} {isAcme && <span className="text-[10px] border border-amber-200 bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-mono">HERO</span>}</div>
+                        <div className="font-medium flex items-center gap-1.5">{c.name}</div>
                         <div className="text-xs text-slate-500 font-mono">{c.domain} · {c.segment}</div>
                       </td>
                       <td className="p-3"><RiskBadge level={c.risk_level||'HEALTHY'} size="sm" /></td>
@@ -160,7 +172,7 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
                     </tr>
                   );
                 })}
-                {filtered.length===0 && <tr><td colSpan={6} className="p-8 text-center text-sm text-slate-500">No accounts match filters</td></tr>}
+                {filtered.length===0 && <tr><td colSpan={6} className="p-8 text-center"><div className="text-sm text-slate-500">No accounts match filters</div><button onClick={()=>{setQ('');setRiskFilter('ALL');}} className="mt-2 text-xs border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50">Clear filters</button></td></tr>}
               </tbody>
             </table>
           </div>
@@ -168,16 +180,18 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
         </Card>
       </div>
 
-      {acme && (
+      {hero ? (
         <div className="bg-[#0F172A] text-white rounded-xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <div className="text-xs font-mono tracking-wide text-slate-400">FEATURED BENCHMARK · Acme Corp</div>
-            <div className="text-lg font-semibold mt-1">{acme.name} — ${acme.arr.toLocaleString()} ARR</div>
-            <div className="text-sm text-slate-300 mt-1">{acme.domain} · {acme.segment} · CSM {acme.csm_name} · Health {Math.round(acme.health_score)}/100</div>
+            <div className="text-xs font-mono tracking-wide text-slate-400">FEATURED · Highest risk</div>
+            <div className="text-lg font-semibold mt-1">{hero.name} — ${hero.arr.toLocaleString()} ARR</div>
+            <div className="text-sm text-slate-300 mt-1">{hero.domain} · {hero.segment} · CSM {hero.csm_name} · Health {Math.round(hero.health_score)}/100 · {hero.risk_level}</div>
           </div>
-          <button onClick={()=>onSelectCustomer(acme.id)} className="bg-white text-slate-900 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-100">Launch Acme 360 Rescue →</button>
+          <button onClick={()=>onSelectCustomer(hero.id)} className="bg-white text-slate-900 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-100">Launch {hero.name.split(' ')[0]} 360 Rescue →</button>
         </div>
-      )}
+      ) : customers.length===0 ? (
+        <EmptyState title="No customers yet" description="Import CSV or add manually to see portfolio, KPIs, and risk distribution. Go to Customers → Import CSV / Add customer." action={<button onClick={load} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm">Refresh</button>} />
+      ) : null}
     </div>
   );
 };

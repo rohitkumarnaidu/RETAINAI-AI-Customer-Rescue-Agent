@@ -97,7 +97,7 @@ export const InvestigationsView: React.FC<{onSelectCustomer:(id:string)=>void}> 
                     {detail.final_decision && (
                       <div>
                         <div className="text-xs font-semibold">Final decision (structured output)</div>
-                        <pre className="mt-1 text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 overflow-auto max-h-48">{typeof detail.final_decision==='string'? detail.final_decision : JSON.stringify(detail.final_decision,null,2)}</pre>
+                        <pre className="mt-1 text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5 overflow-auto max-h-48">{(()=>{ const v=detail.final_decision; if(typeof v==='string'){ try{ return JSON.stringify(JSON.parse(v),null,2);}catch{ return v; } } return JSON.stringify(v,null,2); })()}</pre>
                       </div>
                     )}
                     {detail.error && <div className="text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg p-2.5 flex gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/>{detail.error}</div>}

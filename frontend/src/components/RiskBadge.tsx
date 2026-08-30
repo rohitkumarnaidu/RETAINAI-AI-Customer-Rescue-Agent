@@ -32,8 +32,19 @@ export const HealthRing: React.FC<{score:number; size?:number}> = ({score, size=
 };
 
 export const ConfidenceBadge: React.FC<{confidence:any; uncertainty?:string}> = ({confidence, uncertainty})=>{
+  // No hardcoded fallback — show — when confidence missing; derive via uncertainty_status when present
+  if(confidence==null || confidence==='' || (typeof confidence==='string' && confidence.trim()==='')){
+    if(uncertainty==='INSUFFICIENT_EVIDENCE'){
+      return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200`}>LOW \u00B7 Insufficient evidence \u00B7 —</span>;
+    }
+    return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200`}>\u2014</span>;
+  }
   let label='HIGH'; let cls='bg-slate-900 text-white';
-  const c = typeof confidence==='number' ? confidence : parseFloat(confidence)||0.85;
+  const parsed = typeof confidence==='number' ? confidence : parseFloat(String(confidence));
+  const c = Number.isFinite(parsed) ? parsed : NaN;
+  if(Number.isNaN(c)){
+    return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200`}>\u2014</span>;
+  }
   const pct = c<=1 ? Math.round(c*100) : Math.round(c);
   if(uncertainty==='INSUFFICIENT_EVIDENCE' || pct<50){ label='LOW \u00B7 Insufficient evidence'; cls='bg-amber-100 text-amber-800 border border-amber-200'; }
   else if(pct<75){ label='MEDIUM'; cls='bg-slate-100 text-slate-700 border border-slate-200'; }

@@ -50,6 +50,10 @@ export const getAllOutcomes = async (): Promise<InterventionOutcome[]> => { cons
 export const getPortfolio = async (): Promise<{metrics:any;customers:Customer[]}> => { const r=await api.get('/portfolio'); return r.data; };
 export const getObservability = async (): Promise<any> => { const r=await api.get('/metrics/observability'); return r.data; };
 export const ingestEvent = async (customerId:string, eventType:string, payload:Record<string,any>): Promise<any> => { const r=await api.post('/events', {customer_id: customerId, event_type: eventType, payload}); return r.data; };
+export const recordOutcome = async (interventionId:string, payload:{health_before:number; health_after:number; usage_before?:number; usage_after?:number; customer_response?:string; notes?:string;}): Promise<InterventionOutcome> => {
+  const r = await api.post<InterventionOutcome>(`/interventions/${interventionId}/outcome`, { intervention_id: interventionId, ...payload });
+  return r.data;
+};
 
 // — CSV & Single Customer Create —
 export const createCustomer = async (payload: Record<string, any>): Promise<Customer> => {

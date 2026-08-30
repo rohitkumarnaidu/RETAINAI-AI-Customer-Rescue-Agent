@@ -1,11 +1,11 @@
 import React, {useState, useEffect, useMemo} from 'react';
 import { getCustomers } from '../services/api';
 import { RiskBadge, HealthRing } from './RiskBadge';
-import { Card, ErrorState, SkeletonCard } from './ui';
+import { Card, ErrorState, SkeletonCard, EmptyState } from './ui';
 import { CsvUpload } from './CsvUpload';
 import { Search, ArrowUpRight, SlidersHorizontal, Upload, X, RefreshCw } from 'lucide-react';
 
-export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({onSelectCustomer})=>{
+export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void; initialShowImport?:boolean; onImportConsumed?:()=>void}> = ({onSelectCustomer, initialShowImport, onImportConsumed})=>{
   const [customers,setCustomers]=useState<any[]>([]);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState<string|null>(null);
@@ -28,8 +28,9 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
   },[customers,q,seg,risk,sort]);
 
   const [page,setPage]=useState(1); const pageSize=20;
-  const [showImport,setShowImport]=useState(false);
+  const [showImport,setShowImport]=useState(!!initialShowImport);
   const [toast,setToast]=useState<string|null>(null);
+  useEffect(()=>{ if(initialShowImport){ setShowImport(true); onImportConsumed?.(); }},[initialShowImport]);
   const fmtDate=(s:string)=>{ try{ const d=new Date(s); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch{return s}};
   const fmtARR=(n:number)=> n>=1000? `$${(n/1000).toFixed(0)}k` : `$${n.toLocaleString()}`;
   if(loading) return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[1,2,3,4].map(i=><SkeletonCard key={i}/>)}</div>;
@@ -68,6 +69,9 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
             </div>
           </div>
         </div>
+        {customers.length===0 && !loading && !error && (
+          <EmptyState title="No customers yet" description="No accounts in portfolio. Import CSV or add a customer to get started. Your data will appear here with dynamic health/risk computed instantly." action={<button onClick={()=>setShowImport(true)} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm">Import CSV / Add customer</button>} />
+        )}
         {showImport && (
           <div className="mt-4 border-t border-slate-100 pt-4">
             {toast && <div className="mb-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-2 rounded-lg">{toast}</div>}
@@ -94,7 +98,7 @@ export const CustomersView: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
                   <td className="p-3 align-middle text-right"><span className="inline-flex items-center gap-1 border border-slate-200 rounded-lg px-2.5 py-1 text-xs bg-white whitespace-nowrap">Open <ArrowUpRight className="w-3 h-3"/></span></td>
                 </tr>
               ))}
-              {filtered.length===0 && <tr><td colSpan={7} className="p-8 text-center text-sm text-slate-500">No results — adjust filters.</td></tr>}
+              {filtered.length===0 && <tr><td colSpan={7} className="p-8 text-center"><div className="text-sm text-slate-500">No results — adjust filters.</div><button onClick={()=>{setQ('');setSeg('ALL');setRisk('ALL');setSort('name');}} className="mt-2 text-xs border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50">Clear filters</button></td></tr>}
             </tbody>
           </table>
         </div>
