@@ -61,6 +61,13 @@ export function App() {
     return ()=>{cancelled=true};
   },[activeTab]);
 
+  // Auto-land on Onboarding when tenant has 0 customers (fresh org) — fixes refresh starting at Command Center
+  useEffect(()=>{
+    if (hasCustomers===false && activeTab==='command') {
+      setActiveTab('onboarding');
+    }
+  },[hasCustomers, activeTab]);
+
   const handleSelectCustomer = (customerId: string) => {
     setSelectedCustomerId(customerId);
     setActiveTab('customer360');
