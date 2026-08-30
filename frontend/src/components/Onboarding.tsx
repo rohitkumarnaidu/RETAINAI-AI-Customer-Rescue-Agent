@@ -16,6 +16,7 @@ export const Onboarding: React.FC<{ onComplete?: () => void }> = ({ onComplete }
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [seedLoading, setSeedLoading] = useState(false);
   const [seedResult, setSeedResult] = useState<string | null>(null);
+  const [seedError, setSeedError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
   const handleJsonBatch = async () => {
@@ -35,14 +36,14 @@ export const Onboarding: React.FC<{ onComplete?: () => void }> = ({ onComplete }
   };
 
   const handleSeed = async () => {
-    setSeedLoading(true); setSeedResult(null);
+    setSeedLoading(true); setSeedResult(null); setSeedError(null);
     try {
       const r = await seedSample();
       setSeedResult(`${r.message} · ${r.seeded} seeded, ${r.skipped} skipped`);
       setTimeout(() => setStep(4), 500);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string };
-      setSeedResult(err?.response?.data?.detail || err?.message || 'Seed failed');
+      setSeedError(err?.response?.data?.detail || err?.message || 'Seed failed');
     } finally { setSeedLoading(false); }
   };
 
@@ -97,6 +98,7 @@ export const Onboarding: React.FC<{ onComplete?: () => void }> = ({ onComplete }
                 <button onClick={handleSeed} disabled={seedLoading} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-4 py-2.5 rounded-lg text-xs font-medium hover:bg-slate-50 disabled:opacity-50">{seedLoading ? 'Seeding...' : 'Or load sample 101'}</button>
               </div>
               {seedResult && <div className="mt-3 text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-2 rounded-lg">{seedResult}</div>}
+              {seedError && <div className="mt-3 text-xs bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg">{seedError}</div>}
             </div>
           </div>
         </Card>
@@ -172,6 +174,7 @@ export const Onboarding: React.FC<{ onComplete?: () => void }> = ({ onComplete }
                 <div className="text-sm text-slate-600">Loads <code className="bg-slate-100 px-1 rounded">retainai_dataset_v2.json</code> into your tenant only (skips duplicates).</div>
                 <button onClick={handleSeed} disabled={seedLoading} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50">{seedLoading ? 'Seeding…' : 'Seed sample 101'} <Database className="w-3.5 h-3.5" /></button>
                 {seedResult && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-2 rounded-lg">{seedResult}</div>}
+                {seedError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded-lg">{seedError}</div>}
                 <div className="text-xs text-slate-500">Already have customers? Sample appends, never drops.</div>
               </div>
             </Card>

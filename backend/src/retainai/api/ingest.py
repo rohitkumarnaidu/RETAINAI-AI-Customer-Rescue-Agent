@@ -547,13 +547,71 @@ async def seed_sample(
             from retainai.scripts.seed_database import get_dataset_path
 
             dataset_path = str(get_dataset_path())
+            if not os.path.exists(dataset_path):
+                dataset_path = None
         except Exception:
-            raise HTTPException(status_code=500, detail="Dataset not found")
-    try:
-        with open(dataset_path, "r", encoding="utf-8") as f:
-            dataset = json.load(f)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load dataset: {e}")
+            dataset_path = None
+    # Fallback: if still not found (Docker without data mount), generate synthetic 101 on the fly
+    use_synthetic = False
+    if dataset_path is None or not os.path.exists(dataset_path):
+        # Synthetic fallback — ensures Seed 101 always works even without data file
+        use_synthetic = True
+        dataset = None  # will generate below
+        dataset_path = None
+    else:
+        use_synthetic = False
+    if use_synthetic:
+        # Synthetic fallback — 101 benchmark archetypes without needing file
+        import random
+        archetypes = ["HEALTHY"]*22 + ["RECOVERING"]*18 + ["EARLY_WARNING"]*20 + ["AT_RISK"]*20 + ["CRITICAL"]*20 + ["ACME_HERO"]
+        random.shuffle(archetypes)
+        # Ensure we have 101
+        archetypes = (archetypes * 2)[:101]
+        customers_data_synth = []
+        usage_synth = []
+        tickets_synth = []
+        feedback_synth = []
+        base_date = datetime.now(timezone.utc) - timedelta(days=30)
+        for idx, arch in enumerate(archetypes[:101]):
+            cid = f"synth_{tenant_id[:4]}_{idx:03d}_{uuid.uuid4().hex[:4]}"
+            health = {"HEALTHY": 92, "RECOVERING": 78, "EARLY_WARNING": 68, "AT_RISK": 42, "CRITICAL": 18, "ACME_HERO": 88}.get(arch, 70)
+            seg = random.choice(["Enterprise","MidMarket","SMB"])
+            ind = random.choice(["Software","FinTech","Healthcare","Retail"])
+            name = f"Synthetic {ind} Co {idx+1}"
+            customers_data_synth.append({
+                "id": cid, "name": name, "domain": f"synth{idx}.com", "segment": seg, "industry": ind,
+                "mrr": random.randint(3000, 20000), "arr": random.randint(36000, 240000),
+                "csm_name": "Auto CSM", "csm_email": "auto@retainai.io",
+                "health_score": health + random.randint(-5,5), "archetype": arch,
+                "created_at": (base_date - timedelta(days=random.randint(0,200))).isoformat(),
+                "renewal_date": (datetime.now(timezone.utc) + timedelta(days=random.randint(30,365))).date().isoformat(),
+            })
+            # usage
+            for d in range(3):
+                usage_synth.append({
+                    "id": f"usg_{cid}_{d}", "customer_id": cid,
+                    "timestamp": (base_date + timedelta(days=d)).isoformat(),
+                    "dau": random.randint(20, 120) if arch in ("HEALTHY","RECOVERING") else random.randint(3, 30),
+                    "feature_clicks": random.randint(30,120), "license_utilization": round(random.uniform(0.3,0.95),2),
+                })
+            if arch in ("AT_RISK","CRITICAL") and random.random() < 0.6:
+                tickets_synth.append({
+                    "id": f"tck_{cid}_{idx}", "customer_id": cid, "severity": "CRITICAL", "status": "OPEN",
+                    "subject": f"Export fails for {name}", "description": "Synthetic critical ticket",
+                    "created_at": (base_date + timedelta(days=1)).isoformat(),
+                })
+                feedback_synth.append({
+                    "id": f"fb_{cid}_{idx}", "customer_id": cid, "sentiment": "NEGATIVE", "score": 2,
+                    "text": f"Workflow broken for {name}", "source": "CSAT_SURVEY",
+                    "created_at": (base_date + timedelta(days=2)).isoformat(),
+                })
+        dataset = {"customers": customers_data_synth, "usage_events": usage_synth, "support_tickets": tickets_synth, "customer_feedbacks": feedback_synth}
+    else:
+        try:
+            with open(dataset_path, "r", encoding="utf-8") as f:
+                dataset = json.load(f)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to load dataset: {e}")
 
     customers_data: List[Dict[str, Any]] = dataset.get("customers", [])
     usage_data: List[Dict[str, Any]] = dataset.get("usage_events", [])

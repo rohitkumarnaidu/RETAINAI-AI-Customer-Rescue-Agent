@@ -9,11 +9,13 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
     env_file: .env
+    volumes:
+      - ./data:/app/data:ro
     environment:
       # --- Database: sqlite fallback for demo reliability (postgres also works after timezone fix) ---
       # Prod-like would be: postgresql+asyncpg://retainai:retainai@db:5432/retainaidb
