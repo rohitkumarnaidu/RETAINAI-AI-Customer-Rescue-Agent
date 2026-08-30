@@ -162,11 +162,12 @@ class AgentTools:
             SearchEvidenceInput(customer_id=customer_id, days=days)
             self._authorize_customer_scope(customer_id)
             await self._authorize_tenant_for_customer(customer_id)
-            # Timeout guard (simplified)
-            usage = await self.telemetry_repo.get_usage_events(customer_id, days=days)
-            tickets = await self.telemetry_repo.get_support_tickets(customer_id, days=days)
-            feedback = await self.telemetry_repo.get_feedback_entries(customer_id, days=days)
-            events = await self.telemetry_repo.get_account_events(customer_id, days=days)
+            # Timeout guard with wait_for (5s)
+            import asyncio
+            usage = await asyncio.wait_for(self.telemetry_repo.get_usage_events(customer_id, days=days), timeout=TOOL_TIMEOUT_SECONDS)
+            tickets = await asyncio.wait_for(self.telemetry_repo.get_support_tickets(customer_id, days=days), timeout=TOOL_TIMEOUT_SECONDS)
+            feedback = await asyncio.wait_for(self.telemetry_repo.get_feedback_entries(customer_id, days=days), timeout=TOOL_TIMEOUT_SECONDS)
+            events = await asyncio.wait_for(self.telemetry_repo.get_account_events(customer_id, days=days), timeout=TOOL_TIMEOUT_SECONDS)
             self._log_tool_call("search_customer_evidence", {"customer_id": customer_id, "days": days}, "SUCCESS", int((time.time()-start)*1000))
             return {
                 "usage_events": [
@@ -284,15 +285,20 @@ class AgentTools:
                 # Truncate instead of failing to allow long root causes
                 risk_pattern = risk_pattern[:500]
             memories = await self.memory_repo.get_validated_memories(customer_segment=segment, tenant_id=eff_tenant)
-            # Filter non-relevant: if risk_pattern empty, return all; else fuzzy match
-            filtered = []
-            for m in memories:
-                # Relevance check: segment match already filtered; also check risk pattern token overlap
-                if risk_pattern and risk_pattern.lower() not in (m.risk_pattern or "").lower() and risk_pattern.lower() not in (m.context_pattern or "").lower():
-                    # If no token match and we have many memories, skip irrelevant
-                    # But keep if confidence high and segment matches - we keep all for MVP but mark relevance
-                    pass
-                filtered.append(m)
+            # Rank by relevance: token overlap + confidence + success_rate
+            def _score(m):
+                risk_pat_lower = (m.risk_pattern or "").lower()
+                ctx_pat_lower = (m.context_pattern or "").lower()
+                rec_lower = (m.recommended_strategy or "").lower()
+                combined = f"{risk_pat_lower} {ctx_pat_lower} {rec_lower}"
+                if not risk_pattern:
+                    return (m.confidence or 0) * 0.5 + (getattr(m, "success_rate", 0) or 0) * 0.5
+                q_tokens = set(risk_pattern.lower().split())
+                c_tokens = set(combined.split())
+                overlap = len(q_tokens & c_tokens) / max(1, len(q_tokens))
+                return overlap * 0.6 + (m.confidence or 0) * 0.2 + (getattr(m, "success_rate", 0) or 0) * 0.2
+            memories_sorted = sorted(memories, key=_score, reverse=True)
+            filtered = memories_sorted[:3] if memories_sorted else []
             self._log_tool_call("query_experience_memory", {"segment": segment, "risk_pattern": risk_pattern[:50]}, "SUCCESS", int((time.time()-start)*1000))
             return [
                 {

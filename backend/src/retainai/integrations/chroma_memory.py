@@ -31,7 +31,18 @@ class ChromaMemoryStore:
         self._collection = None
         try:
             import chromadb  # type: ignore
-            self._client = chromadb.Client()
+            from retainai.config import settings as _s
+            persist_dir = getattr(_s, "CHROMA_PERSIST_DIR", "./chroma_data")
+            try:
+                if persist_dir:
+                    import os
+                    os.makedirs(persist_dir, exist_ok=True)
+                    self._client = chromadb.PersistentClient(path=persist_dir)
+                    logger.info(f"ChromaMemoryStore: using PersistentClient at {persist_dir}")
+                else:
+                    self._client = chromadb.Client()
+            except Exception:
+                self._client = chromadb.Client()
             self._collection = self._client.get_or_create_collection(name=collection_name)
             self._collections[collection_name] = self._collection
             self._use_chroma = True
