@@ -76,8 +76,17 @@ class LearningEngine:
     ):
         """Validation Gate: Converts successful interventions into validated Experience Memories."""
         memory_id = f"mem_val_{intervention.customer_id[:5]}_{int(datetime.now(timezone.utc).timestamp())}"
-        # Dynamic pattern from actual intervention/customer context
-        segment = getattr(intervention.customer, "segment", "Enterprise") if getattr(intervention, "customer", None) else "Enterprise"
+        # Fetch segment without triggering lazy-load MissingGreenlet — use explicit query
+        segment = "Enterprise"
+        try:
+            from sqlalchemy import select
+            from retainai.db.models import Customer
+            cust_res = await self.db.execute(select(Customer.segment).where(Customer.id == intervention.customer_id))
+            seg_val = cust_res.scalar_one_or_none()
+            if seg_val:
+                segment = seg_val
+        except Exception:
+            segment = "Enterprise"
         memory = ExperienceMemory(
             id=memory_id,
             context_pattern=f"{segment} Account Recovery — {intervention.action_type}",
@@ -109,8 +118,16 @@ class LearningEngine:
         # Fetch actual customer health from DB to avoid hardcoding 40.0
         intervention = await engine.intervention_repo.get_by_id(intervention_id)
         health_before = 40.0 # Fallback
-        if intervention and intervention.customer:
-            health_before = intervention.customer.health_score
+        if intervention:
+            try:
+                from sqlalchemy import select
+                from retainai.db.models import Customer
+                cust_res = await db.execute(select(Customer.health_score).where(Customer.id == intervention.customer_id))
+                hb = cust_res.scalar_one_or_none()
+                if hb is not None:
+                    health_before = float(hb)
+            except Exception:
+                pass
             
         health_after = health_before + (delta_usage if success else -10.0)
         
