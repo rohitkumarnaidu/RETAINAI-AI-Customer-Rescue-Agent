@@ -21,14 +21,16 @@ class LLMClient:
         model: Optional[str] = None,
         provider: Optional[str] = None,
     ):
-        # Resolve api_key: prefer explicit, then settings.LLM_API_KEY, then GROQ_API_KEY alias, then env
+        # Resolve api_key: prefer explicit, then settings.LLM_API_KEY, then provider-specific aliases, then raw env
         resolved_key = api_key or settings.LLM_API_KEY
         if (not resolved_key or resolved_key in ("mock_key_for_dev", "")) and getattr(settings, "GROQ_API_KEY", ""):
             resolved_key = settings.GROQ_API_KEY
-        # Also check raw env for GROQ (in case .env has GROQ_API_KEY directly)
+        if (not resolved_key or resolved_key in ("mock_key_for_dev", "")) and getattr(settings, "OPENAI_API_KEY", ""):
+            resolved_key = settings.OPENAI_API_KEY
+        # Also check raw env for GROQ/OPENAI (in case .env has them directly)
         if (not resolved_key or resolved_key in ("mock_key_for_dev", "")):
             import os
-            env_groq = os.getenv("GROQ_API_KEY") or os.getenv("GROQ_KEY")
+            env_groq = os.getenv("GROQ_API_KEY") or os.getenv("GROQ_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
             if env_groq:
                 resolved_key = env_groq
         self.api_key = resolved_key
@@ -113,6 +115,39 @@ class LLMClient:
                         return response_schema.model_validate(json_dict)
                     else:
                         logger.warning(f"Groq API returned HTTP {resp.status_code} body={resp.text[:300]}. Using fallback.")
+
+            elif self.provider in ("openai", "gpt", "gpt-4", "gpt-4o", "o1", "o3"):
+                # OpenAI GPT — best quality for structured investigation (JSON mode)
+                # Models: gpt-4o (recommended, best), gpt-4o-mini (cheap/fast), gpt-4-turbo, o1 (reasoning)
+                url = "https://api.openai.com/v1/chat/completions"
+                effective_model = self.model
+                if "gemini" in effective_model.lower() or "llama" in effective_model.lower() or "deepseek" in effective_model.lower():
+                    effective_model = "gpt-4o"
+                # gpt-4o supports json_object; o1 uses different param
+                is_o1 = effective_model.startswith("o1") or effective_model.startswith("o3")
+                headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": effective_model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"{user_prompt}\n\nOutput STRICT JSON matching schema: {response_schema.model_json_schema()}\nReturn ONLY valid JSON, no markdown."},
+                    ],
+                    "temperature": 0.2 if not is_o1 else 1.0,
+                    "max_tokens": 2000,
+                }
+                if not is_o1:
+                    payload["response_format"] = {"type": "json_object"}
+                async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        text_resp = data["choices"][0]["message"]["content"]
+                        clean_json = text_resp.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+                        json_dict = json.loads(clean_json)
+                        logger.info(f"LLM live response provider=openai model={effective_model} schema={response_schema.__name__}")
+                        return response_schema.model_validate(json_dict)
+                    else:
+                        logger.warning(f"OpenAI API returned HTTP {resp.status_code} body={resp.text[:300]}. Using fallback.")
 
         except Exception as e:
             logger.error(f"LLM call failed with exception: {e}. Executing deterministic fallback.")

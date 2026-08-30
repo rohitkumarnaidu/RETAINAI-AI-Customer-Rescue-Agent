@@ -28,10 +28,11 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./retainai.db"
 
-    LLM_PROVIDER: str = "groq"  # gemini | groq | openai | anthropic | mock — groq LPU is fastest for demo
-    LLM_MODEL: str = "llama-3.3-70b-versatile"  # groq: llama-3.3-70b-versatile | deepseek-r1-distill-llama-70b (reasoning) | meta-llama/llama-4-maverick-17b-128e-instruct | qwen/qwen3-32b — gemini: gemini-2.5-pro > gemini-2.5-flash
+    LLM_PROVIDER: str = "groq"  # gemini | groq | openai/gpt | anthropic | mock — groq LPU fastest, gpt-4o best quality
+    LLM_MODEL: str = "llama-3.3-70b-versatile"  # groq: llama-3.3-70b-versatile | deepseek-r1-distill-llama-70b | meta-llama/llama-4-maverick-17b — openai: gpt-4o | gpt-4o-mini | gpt-4-turbo — gemini: gemini-2.5-pro
     LLM_API_KEY: str = "mock_key_for_dev"
     GROQ_API_KEY: str = ""  # alias for LLM_API_KEY when provider=groq (gsk_...)
+    OPENAI_API_KEY: str = ""  # alias when provider=openai/gpt (sk-...)
 
     API_V1_PREFIX: str = "/api/v1"
     CORS_ORIGINS: list[str] = Field(default=["http://localhost:5173", "http://127.0.0.1:5173"])
