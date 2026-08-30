@@ -142,7 +142,7 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((c:any)=>{
-                  const isAcme=c.id==='acme-corp-001';
+                  const isAcme=c.name.toLowerCase().includes('acme');
                   return (
                     <tr key={c.id} onClick={()=>onSelectCustomer(c.id)} className={`hover:bg-slate-50 cursor-pointer ${isAcme ? 'bg-amber-50/60':''}`}>
                       <td className="p-3">

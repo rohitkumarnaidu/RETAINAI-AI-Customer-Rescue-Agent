@@ -13,7 +13,7 @@ type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|
 
 export function App() {
   const [activeTab, setActiveTab] = useState<Tab>('command');
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('acme-corp-001');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('b2a88551-82e5-43d7-b620-ba1640900c71');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -84,7 +84,7 @@ export function App() {
             <div className="hidden md:flex items-center gap-1.5 text-xs font-mono text-slate-500 border border-slate-200 bg-slate-50 px-2.5 py-1.5 rounded-lg">
               <FlaskConical className="w-3.5 h-3.5" />
               <span>Acme Corp · Hero scenario</span>
-              <button onClick={()=>handleSelectCustomer('acme-corp-001')} className="ml-1 bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700 hover:bg-slate-50">Open</button>
+              <button onClick={()=>handleSelectCustomer('b2a88551-82e5-43d7-b620-ba1640900c71')} className="ml-1 bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700 hover:bg-slate-50">Open</button>
             </div>
             <button onClick={handleResetDemo} disabled={resetting} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50">
               <RefreshCw className={`w-3.5 h-3.5 ${resetting? 'animate-spin':''}`} /> <span className="hidden sm:inline">Reset demo</span>
