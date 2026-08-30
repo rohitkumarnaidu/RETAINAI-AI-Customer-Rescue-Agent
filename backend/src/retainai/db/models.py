@@ -636,9 +636,10 @@ class ChatConversation(Base):
     __tablename__ = "chat_conversations"
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
-    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
-    customer_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("customers.id"), nullable=True, index=True)
-    user_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("users.id"), nullable=True, index=True)
+    # No FK to allow chats before tenant/customer seeding and demo-mode flexibility
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    customer_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False, default="New chat")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -655,9 +656,9 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
-    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("tenants.id"), nullable=True, index=True)
-    conversation_id: Mapped[str] = mapped_column(String(80), ForeignKey("chat_conversations.id"), nullable=False, index=True)
-    customer_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("customers.id"), nullable=True, index=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    conversation_id: Mapped[str] = mapped_column(String(80), ForeignKey("chat_conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False)  # user | assistant | system
     content: Mapped[str] = mapped_column(Text, nullable=False)
     agent_traces: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True, default=list)
