@@ -520,7 +520,7 @@ async def get_observability_metrics(db: AsyncSession = Depends(get_db)):
         "agent_runs": {"total": total_runs, "completed": completed, "failed": failed, "completion_rate": round(completed/max(1,total_runs),2)},
         "tool_calls": {"total": total_tool_calls, "success_rate": 0.97 if total_runs>0 else 1.0},
         "outcomes": {"total": len(outcomes), "success": success_outcomes, "success_rate": round(success_outcomes/max(1,len(outcomes)),2)},
-        "learning": {"candidates": len(candidates), "validated_memories": len(outcomes)},
+        "learning": {"candidates": len(candidates), "validated_memories": len([m for m in (await MemoryRepository(db).list_all()) if str(getattr(m.validation_status, "value", m.validation_status)) == "VALIDATED"])},
         "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
     }
 
