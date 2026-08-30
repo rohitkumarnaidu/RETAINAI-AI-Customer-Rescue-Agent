@@ -8,12 +8,13 @@ import { LearningView } from './components/LearningView';
 import { AuditView } from './components/AuditView';
 import { Onboarding } from './components/Onboarding';
 import { SettingsView } from './components/SettingsView';
+import { AnalyticsView } from './components/AnalyticsView';
 import { LoginPage } from './pages/Login';
 import { useAuth } from './context/AuthContext';
 import { resetDemo, getCustomers } from './services/api';
-import { LayoutDashboard, Users, UserCircle2, SearchCode, ClipboardList, GraduationCap, ScrollText, Shield, RefreshCw, Menu, X, Upload, Settings, LogOut, LogIn } from 'lucide-react';
+import { LayoutDashboard, Users, UserCircle2, SearchCode, ClipboardList, GraduationCap, ScrollText, Shield, RefreshCw, Menu, X, Upload, Settings, LogOut, LogIn, BarChart3 } from 'lucide-react';
 
-type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit'|'onboarding'|'settings';
+type Tab = 'command'|'customers'|'customer360'|'investigations'|'interventions'|'learning'|'audit'|'onboarding'|'settings'|'analytics';
 
 export function App() {
   const { user, tenantId, logout, isAuthenticated } = useAuth();
@@ -89,7 +90,7 @@ export function App() {
     } finally { setResetting(false); }
   };
 
-  // Simplified, ordered by workflow: Setup → Workspace → Intelligence → System
+  // Simplified, ordered by workflow: Setup → Workspace (SENSE) → Analytics (MEASURE) → Intelligence (THINK/ACT/LEARN) → System
   const navSections: {title:string, items:{id:Tab,label:string,icon:any}[]}[] = [
     {title:'START', items:[{id:'onboarding', label:'Onboarding', icon:Users}]},
     {title:'WORKSPACE', items:[
@@ -97,6 +98,7 @@ export function App() {
       {id:'customers', label:'Customers', icon:Users},
       {id:'customer360', label:'Customer 360', icon:UserCircle2},
     ]},
+    {title:'ANALYTICS', items:[{id:'analytics', label:'Analytics', icon:BarChart3}]},
     {title:'INTELLIGENCE', items:[
       {id:'investigations', label:'Investigations', icon:SearchCode},
       {id:'interventions', label:'Interventions', icon:ClipboardList},
@@ -255,6 +257,7 @@ export function App() {
           {activeTab==='investigations' && <InvestigationsView onSelectCustomer={handleSelectCustomer} />}
           {activeTab==='interventions' && <InterventionsView />}
           {activeTab==='learning' && <LearningView />}
+          {activeTab==='analytics' && <AnalyticsView />}
           {activeTab==='onboarding' && <Onboarding onComplete={()=> setActiveTab('command')} />}
           {activeTab==='settings' && <SettingsView />}
           {activeTab==='audit' && <AuditView />}

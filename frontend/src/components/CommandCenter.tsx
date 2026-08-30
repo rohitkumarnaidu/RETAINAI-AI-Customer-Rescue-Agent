@@ -17,6 +17,31 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
     finally{ setLoading(false); }
   };
   useEffect(()=>{ load(); },[]);
+  useEffect(()=>{
+    let mounted = true;
+    const handler = () => { if(mounted) load(); };
+    try{
+      import('../services/api').then(m=>{
+        const emitter = (m as any).refreshEmitter as EventTarget | undefined;
+        if(emitter && emitter.addEventListener){
+          emitter.addEventListener('portfolio', handler);
+          emitter.addEventListener('customers', handler);
+        }
+      });
+    } catch{}
+    return ()=>{
+      mounted = false;
+      try{
+        import('../services/api').then(m=>{
+          const emitter = (m as any).refreshEmitter as EventTarget | undefined;
+          if(emitter && emitter.removeEventListener){
+            emitter.removeEventListener('portfolio', handler);
+            emitter.removeEventListener('customers', handler);
+          }
+        });
+      } catch{}
+    };
+  },[]);
 
   const customers: any[] = data?.customers || [];
   const metrics = data?.metrics || {};
