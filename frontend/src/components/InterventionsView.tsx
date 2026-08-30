@@ -53,8 +53,8 @@ export const InterventionsView: React.FC = ()=>{
     if(Number.isNaN(after) || after<0 || after>100){ setFormError('Health after 0-100 required'); return; }
     setSaving(true); setFormError(null);
     try{
-      // health_before from iv or fallback 70; try fetch customer health via outcome? use 70 as before if unknown
-      const before = 70; // server will also accept health_before, but we approximate; Customer360 uses real health
+      const inferredBefore = Number(iv?.health_before ?? iv?.health_score ?? iv?.risk_snapshot ?? 0);
+      const before = inferredBefore >0 && inferredBefore <=100 ? inferredBefore : 0;
       const oc = await recordOutcome(iv.id, { health_before: before, health_after: after, usage_before: 50, usage_after: Number(usageAfter)||after, customer_response: response, notes });
       setToast(`Outcome for ${iv.id.slice(0,8)} — ${oc.health_before}→${oc.health_after} Δ${oc.health_delta} ${oc.status} ${oc.status==='SUCCESS'?'→ validated memory':''}`);
       setOutcomeFor(null); setHealthAfter(''); setUsageAfter(''); setNotes('');

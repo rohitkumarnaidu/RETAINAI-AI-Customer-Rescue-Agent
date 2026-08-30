@@ -93,6 +93,24 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const parseCsvLine = (line: string): string[] => {
+    const out: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    for(let i=0;i<line.length;i++){
+      const ch = line[i];
+      if(ch === '"'){
+        if(inQuotes && line[i+1]==='"'){ cur += '"'; i++; }
+        else inQuotes = !inQuotes;
+      } else if(ch===',' && !inQuotes){
+        out.push(cur.trim());
+        cur = '';
+      } else cur += ch;
+    }
+    out.push(cur.trim());
+    return out.map(v=> v.replace(/^"(.*)"$/s,'$1').trim());
+  };
+
   const handleFile = (f: File) => {
     setFile(f); setResult(null); setError(null);
     const reader = new FileReader();
@@ -102,10 +120,10 @@ export const CsvUpload: React.FC<{ onSuccess?: () => void; onClose?: () => void 
         setRawText(text);
         const lines = text.split(/\r?\n/).filter(l => l.trim());
         if (lines.length < 1) return;
-        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+        const headers = parseCsvLine(lines[0]);
         setPreviewHeaders(headers);
         const allRows = lines.slice(1).map(line => {
-          const cols = line.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
+          const cols = parseCsvLine(line);
           const obj: Record<string,string> = {};
           headers.forEach((h, i) => obj[h] = (cols[i] || '').trim());
           return obj;

@@ -72,6 +72,31 @@ async def ensure_demo_tenant():
     except Exception as e:
         logger.warning(f"ensure_demo_tenant skipped: {e}")
 
+async def ensure_dynamic_columns():
+    """Migrate existing DB for dynamic extra fields: add metadata_json JSON where missing."""
+    try:
+        async with engine.begin() as conn:
+            if "sqlite" in str(engine.url):
+                for tbl, col in [("customers","metadata_json"),("support_tickets","metadata_json"),("customer_feedbacks","metadata_json")]:
+                    try:
+                        res = await conn.execute(text(f"PRAGMA table_info('{tbl}')"))
+                        cols = [row[1] for row in res.fetchall()]
+                        if col not in cols:
+                            logger.info(f"Migrating {tbl}: adding {col} JSON")
+                            await conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN {col} JSON"))
+                    except Exception as e:
+                        logger.debug(f"Dynamic migration skip {tbl}.{col}: {e}")
+            else:
+                for tbl, col in [("customers","metadata_json"),("support_tickets","metadata_json"),("customer_feedbacks","metadata_json")]:
+                    try:
+                        res = await conn.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='{tbl}' AND column_name='{col}'"))
+                        if res.fetchone() is None:
+                            await conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN {col} JSON"))
+                    except Exception as e:
+                        logger.debug(f"Dynamic migration skip {tbl}.{col}: {e}")
+    except Exception as e:
+        logger.warning(f"ensure_dynamic_columns failed: {e}")
+
 async def ensure_tenancy_columns():
     """Migrate existing SQLite/Postgres DB: add tenant_id column nullable where missing → backfill demo-tenant-001."""
     # Only for SQLite; Postgres would use alembic. We implement generic ALTER ADD COLUMN if missing.
@@ -127,6 +152,10 @@ async def lifespan(app: FastAPI):
         await ensure_tenancy_columns()
     except Exception as e:
         logger.warning(f"tenancy migration warning: {e}")
+    try:
+        await ensure_dynamic_columns()
+    except Exception as e:
+        logger.warning(f"dynamic migration warning: {e}")
     # Ensure demo tenant exists
     await ensure_demo_tenant()
     yield
@@ -140,7 +169,14 @@ app = FastAPI(
 )
 
 # CORS hardening: use configured origins, never wildcard with credentials (S43)
-cors_origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else ["http://localhost:5173"]
+# Support both list and comma-separated string (render.yaml bare string)
+_raw = settings.CORS_ORIGINS
+if isinstance(_raw, list):
+    cors_origins = _raw
+elif isinstance(_raw, str):
+    cors_origins = [s.strip() for s in _raw.split(",") if s.strip()]
+else:
+    cors_origins = ["http://localhost:5173"]
 # Sanitize: if wildcard present, strip credentials
 allow_credentials = True
 if "*" in cors_origins:
@@ -150,8 +186,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=allow_credentials,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "X-Tenant-Id", "Content-Type", "X-Request-Id", "X-API-Key"],
 )
 
 # ── Phase 5 Prod Hardening: in-memory rate limiting per-tenant (primary) + per-IP fallback ──
@@ -176,8 +212,11 @@ async def add_request_id(request: Request, call_next):
             try:
                 import jwt
                 secret = getattr(settings, "JWT_SECRET", getattr(settings, "AUTH_SECRET", ""))
-                # Decode without verify exp for middleware (auth will verify); capture tid for observability
-                payload = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_exp": False})
+                # Try verify exp in prod, fallback to no-verify for observability only
+                try:
+                    payload = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_exp": not settings.DEMO_MODE})
+                except Exception:
+                    payload = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_exp": False})
                 tid = payload.get("tid") or payload.get("tenant_id")
             except Exception:
                 pass
@@ -191,7 +230,8 @@ async def add_request_id(request: Request, call_next):
         request.state.tenant_id = None
 
     # ── Rate limit: Phase 5 — bucket key prefers tenant_id when JWT present, else IP ──
-    if request.url.path.startswith("/api/") and not settings.DEMO_MODE:
+    # Always-on even in DEMO_MODE (demo reliability kept via 600/60s high threshold)
+    if request.url.path.startswith("/api/"):
         # Prod hardening: per-tenant bucket when tenant known (JWT tid) else per-IP fallback
         tenant_key = getattr(request.state, "tenant_id", None)
         if tenant_key:

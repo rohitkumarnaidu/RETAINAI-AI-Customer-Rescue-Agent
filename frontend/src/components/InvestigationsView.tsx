@@ -15,8 +15,12 @@ export const InvestigationsView: React.FC<{onSelectCustomer:(id:string)=>void}> 
       setLoading(true);
       const cs=await getCustomers();
       const all: any[]=[];
-      for(const c of cs.slice(0,20)){
-        try{ const r=await getAgentRuns(c.id); all.push(...r.map((x:any)=>({...x, customer_name:c.name}))); }catch{}
+      const slice = cs.slice(0,20);
+      const chunkSize = 5;
+      for(let i=0;i<slice.length;i+=chunkSize){
+        const chunk = slice.slice(i, i+chunkSize);
+        const results = await Promise.allSettled(chunk.map(async c=>{ try{ const r=await getAgentRuns(c.id); return r.map((x:any)=>({...x, customer_name:c.name})); }catch{ return []; }}));
+        for(const res of results){ if(res.status==='fulfilled') all.push(...(res.value as any[])); }
       }
       all.sort((a,b)=> new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
       setRuns(all);

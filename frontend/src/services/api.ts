@@ -18,6 +18,32 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Response interceptor: 401 logout + 429 toast + honest error detail extraction
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    try {
+      const status = error?.response?.status;
+      const data = error?.response?.data;
+      const detail = data?.error?.message || data?.detail || data?.message || error?.message || 'Request failed';
+      if (detail && error) error.message = detail;
+      if (status === 401) {
+        try { localStorage.removeItem('retainai_jwt'); } catch {}
+      }
+      if (status === 429) {
+        console.warn('Rate limited:', data);
+      }
+    } catch {}
+    return Promise.reject(error);
+  }
+);
+
+// Refresh emitter for cross-view invalidation (CommandCenter etc.)
+export const refreshEmitter = typeof window !== 'undefined' ? new EventTarget() : ({} as EventTarget);
+export const emitRefresh = (event: string) => {
+  try { (refreshEmitter as EventTarget).dispatchEvent(new CustomEvent(event)); } catch {}
+};
+
 export interface Customer {
   id: string; name: string; domain: string; segment: string; industry: string; plan: string;
   arr: number; mrr?: number; csm_name: string; csm_email: string; start_date: string; renewal_date: string;
@@ -44,7 +70,6 @@ export const getCustomerTimeline = async (id:string, days=60): Promise<TimelineE
 export const getCustomerRisk = async (id:string): Promise<any> => { const r=await api.get<any>(`/customers/${id}/risk`); return r.data; };
 export const getCustomerSignals = async (id:string): Promise<Signal[]> => { const r=await api.get<Signal[]>(`/customers/${id}/signals`); return r.data; };
 export const runInvestigation = async (id:string): Promise<FullAgentInvestigationResponse> => { const r=await api.post<FullAgentInvestigationResponse>(`/agent/investigate/${id}`); return r.data; };
-export const getInvestigation = async (runIdOrCustomerId:string): Promise<any> => { const r=await api.get<any>(`/agent/runs/${runIdOrCustomerId}`); return r.data; };
 export const getAgentRuns = async (customerId:string): Promise<any[]> => { const r=await api.get<any[]>(`/agent/runs/${customerId}`); return r.data; };
 export const getAgentRunDetail = async (runId:string): Promise<any> => { const r=await api.get<any>(`/agent-runs/${runId}`); return r.data; };
 export const approveIntervention = async (interventionId:string, approvedBy="CSM"): Promise<Intervention> => { const r=await api.post<Intervention>(`/interventions/${interventionId}/approve?approved_by=${encodeURIComponent(approvedBy)}`); return r.data; };
@@ -56,7 +81,21 @@ export const resolveEvidence = async (evidenceId:string): Promise<any> => { cons
 export const getCustomerMemory = async (id:string): Promise<any[]> => { const r=await api.get<any[]>(`/customers/${id}/memory`); return r.data; };
 export const getExperienceMemories = async (): Promise<ExperienceMemory[]> => { try{ const r=await api.get<ExperienceMemory[]>('/learning/memories'); return r.data;} catch{ const r=await api.get<ExperienceMemory[]>('/experience-memory'); return r.data; } };
 export const getLearningOverview = async (): Promise<any> => { const r=await api.get<any>('/learning'); return r.data; };
-export const getAllInterventions = async (): Promise<Intervention[]> => { const r=await api.get<Intervention[]>('/interventions'); if(r.data?.length) return r.data; try{ const customers=await getCustomers(); const all:Intervention[]=[]; for(const c of customers){ try{ const per=await getCustomerInterventions(c.id); all.push(...per);}catch{}} return all.length? all: r.data;} catch{ return r.data; } };
+export const getAllInterventions = async (): Promise<Intervention[]> => {
+  const r=await api.get<Intervention[]>('/interventions');
+  if(r.data?.length) return r.data;
+  try{
+    const customers=await getCustomers();
+    const all: Intervention[] = [];
+    const chunkSize = 5;
+    for(let i=0;i<customers.length;i+=chunkSize){
+      const chunk = customers.slice(i, i+chunkSize);
+      const results = await Promise.allSettled(chunk.map(c=>getCustomerInterventions(c.id).catch(()=>[])));
+      for(const res of results){ if(res.status==='fulfilled') all.push(...(res.value as Intervention[])); }
+    }
+    return all.length? all: r.data;
+  } catch{ return r.data; }
+};
 export const getAllOutcomes = async (): Promise<InterventionOutcome[]> => { const r=await api.get<InterventionOutcome[]>('/outcomes'); return r.data; };
 export const getPortfolio = async (): Promise<{metrics:any;customers:Customer[]}> => { const r=await api.get('/portfolio'); return r.data; };
 export const getObservability = async (): Promise<any> => { const r=await api.get('/metrics/observability'); return r.data; };

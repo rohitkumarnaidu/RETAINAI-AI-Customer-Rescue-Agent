@@ -167,6 +167,9 @@ async def ingest_batch(
         except Exception:
             pass
 
+        # Preserve extra/dynamic fields into metadata_json
+        canonical_lower_ingest = {"name","domain","segment","industry","plan","arr","mrr","csm_name","csm","csm_email","health_score","risk_level","risk","renewal_date","start_date","status","id","customer_id","is_false_positive_candidate"}
+        extra_ingest = {k: v for k, v in raw.items() if k.lower() not in canonical_lower_ingest and str(v).strip() != ""}
         customer = Customer(
             id=cid,
             tenant_id=tenant_id,
@@ -185,6 +188,7 @@ async def ingest_batch(
             health_score=round(float(health_score), 1),
             risk_level=risk_enum,
             is_false_positive_candidate=str(raw.get("is_false_positive_candidate", "")).lower() in ("1", "true", "yes"),
+            metadata_json=extra_ingest if extra_ingest else None,
         )
         db.add(customer)
         try:
