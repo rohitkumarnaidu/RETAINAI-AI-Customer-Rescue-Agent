@@ -50,3 +50,19 @@ export const getAllOutcomes = async (): Promise<InterventionOutcome[]> => { cons
 export const getPortfolio = async (): Promise<{metrics:any;customers:Customer[]}> => { const r=await api.get('/portfolio'); return r.data; };
 export const getObservability = async (): Promise<any> => { const r=await api.get('/metrics/observability'); return r.data; };
 export const ingestEvent = async (customerId:string, eventType:string, payload:Record<string,any>): Promise<any> => { const r=await api.post('/events', {customer_id: customerId, event_type: eventType, payload}); return r.data; };
+
+// — CSV & Single Customer Create —
+export const createCustomer = async (payload: Record<string, any>): Promise<Customer> => {
+  const r = await api.post<Customer>('/customers', payload);
+  return r.data;
+};
+export const uploadCustomersCsv = async (file: File): Promise<{status:string;created:number;skipped:number;total_rows:number;errors:any[];message:string}> => {
+  const fd = new FormData();
+  fd.append('file', file);
+  const r = await api.post('/customers/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  return r.data;
+};
+export const getCustomerCsvTemplate = async (): Promise<{headers:string[]; sample_row:string[]; csv_text:string; filename:string; notes:string}> => {
+  const r = await api.get('/customers/template/csv');
+  return r.data;
+};
