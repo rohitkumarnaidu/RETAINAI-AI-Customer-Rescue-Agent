@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getCustomerById, getCustomerTimeline, getCustomerRisk, runInvestigation, approveIntervention, rejectIntervention, getCustomerSignals, getCustomerMemory, getCustomerInterventions, getAgentRuns } from '../services/api';
+import { getCustomerById, getCustomerTimeline, getCustomerRisk, runInvestigation, approveIntervention, rejectIntervention, getCustomerSignals, getCustomerMemory, getCustomerInterventions, getAgentRuns, ingestEvent } from '../services/api';
 import { RiskBadge, HealthRing, ConfidenceBadge } from './RiskBadge';
 import { Card, SectionHeader, Skeleton, ErrorState, EmptyState, EvidenceDrawer } from './ui';
 import { Building, Mail, Activity, Bot, FileText, ListOrdered, CheckCircle2, Clock, TrendingDown, ShieldAlert, Zap, ArrowRight, Sparkles } from 'lucide-react';
@@ -20,6 +20,7 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
   const [approving,setApproving]=useState(false);
   const [approvedId,setApprovedId]=useState<string|null>(null);
   const [timelineFilter,setTimelineFilter]=useState<string>('ALL');
+  const [injecting,setInjecting]=useState<string|null>(null);
 
   const load = async()=>{
     try{
@@ -66,11 +67,29 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
     try{ await rejectIntervention(id, 'Not relevant for this account', customer?.csm_name||'CSM'); setResult(null); setError('Recommendation rejected — feedback captured for learning'); }
     catch(e:any){ setError(e.message||'Reject failed'); }
   };
+  const handleInject = async(type:string)=>{
+    setInjecting(type); setError(null);
+    try{
+      let payload:any={};
+      if(type==='USAGE_EVENT') payload={daily_active_users: 8+Math.floor(Math.random()*5), license_utilization:0.12, feature_clicks:12, sessions:9, id:`usg_live_${Date.now()}`};
+      if(type==='SUPPORT_TICKET') payload={severity:'CRITICAL', status:'OPEN', subject:`Live: Export fails #${String(Date.now()).slice(-4)}`, description:'Injected via Live Data panel — agent will cite this evidence', id:`tck_live_${Date.now()}`};
+      if(type==='CUSTOMER_FEEDBACK') payload={sentiment:'NEGATIVE', text:'Live feedback: workflow broken, need help', score:2, sentiment_score:-0.9, id:`fb_live_${Date.now()}`};
+      const res = await ingestEvent(customerId, type, payload);
+      const [updatedRisk, updatedTl, updatedSignals] = await Promise.all([getCustomerRisk(customerId).catch(()=>null), getCustomerTimeline(customerId,60).catch(()=>[]), getCustomerSignals(customerId).catch(()=>[])]);
+      setRisk(updatedRisk); setTimeline(updatedTl); setSignals(Array.isArray(updatedSignals)?updatedSignals:updatedSignals as any);
+      setError(`Injected ${type} → ${res.status} (health ${updatedRisk?.health_score ?? '—'} ${updatedRisk?.risk_level ?? ''}) — now Run investigation to see new report with tools`);
+    }catch(e:any){ setError(e.message||'Inject failed');}
+    finally{ setInjecting(null); }
+  };
 
   if(loading) return <div className="space-y-4"><div className="bg-white border border-slate-200 rounded-xl p-6 space-y-3"><Skeleton className="h-6 w-1/3"/><Skeleton className="h-4 w-full"/><Skeleton className="h-4 w-2/3"/></div><div className="grid grid-cols-3 gap-4">{[1,2,3].map(i=><Card key={i}><Skeleton className="h-20 w-full"/></Card>)}</div></div>;
   if(!customer) return <EmptyState title="Customer not found" description="Select an account from Command Center or Customers." />;
-  const riskLevel = risk?.risk_level || 'HEALTHY';
-  const healthScore = risk?.health_score ?? customer.health_score ?? 85;
+  // riskLevel: no fake fallback — show "—" if unknown (avoid misleading 'WATCH'/'HEALTHY' when no risk assessment exists)
+  const riskLevel = (risk?.risk_level as string | undefined) ?? null;
+  // healthScore: no magic 85 — show "—" / skeleton when neither risk nor customer provides a score
+  const rawHealthScore = risk?.health_score ?? customer.health_score ?? null;
+  const healthScore = rawHealthScore != null ? Number(rawHealthScore) : null;
+  const hasHealthScore = healthScore != null && !Number.isNaN(healthScore);
   const healthComps = risk?.health_components || {};
   const rootCause = risk?.primary_root_cause || risk?.root_cause || 'No severe risk detected';
   const reasoning = risk?.reasoning_summary || 'Telemetry within nominal ranges.';
@@ -84,11 +103,11 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
     <div className="space-y-5">
       <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <HealthRing score={healthScore} size={64} />
+          {hasHealthScore ? <HealthRing score={healthScore!} size={64} /> : <div className="w-[64px] h-[64px] rounded-full border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-xl" aria-label="Health score unavailable">—</div>}
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-semibold tracking-tight">{customer.name}</h1>
-              <RiskBadge level={riskLevel} size="md" />
+              {riskLevel ? <RiskBadge level={riskLevel} size="md" /> : <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 text-slate-500 px-2.5 py-1 text-xs font-mono" aria-label="Risk level unavailable">—</span>}
               {customer.is_false_positive_candidate && <span className="text-xs border border-amber-200 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-mono">False-positive candidate</span>}
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1 font-mono">
@@ -109,12 +128,28 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
       {error && <ErrorState message={error} onRetry={load} />}
 
       <Card>
+        <SectionHeader title="Inject Live Data (SENSE)" subtitle="Add real telemetry — DB persists, health/risk reassesses instantly, then Run investigation to see agent tools + report" icon={Zap} />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <button onClick={()=>handleInject('USAGE_EVENT')} disabled={!!injecting} className="inline-flex items-center justify-center gap-1.5 border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-amber-100 disabled:opacity-50">
+            {injecting==='USAGE_EVENT' ? <><div className="w-3.5 h-3.5 border-2 border-amber-700 border-t-transparent rounded-full animate-spin"/><span>Injecting…</span></> : <><TrendingDown className="w-3.5 h-3.5"/>Inject Usage Drop (DAU 8)</>}
+          </button>
+          <button onClick={()=>handleInject('SUPPORT_TICKET')} disabled={!!injecting} className="inline-flex items-center justify-center gap-1.5 border border-red-200 bg-red-50 text-red-700 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-red-100 disabled:opacity-50">
+            {injecting==='SUPPORT_TICKET' ? <><div className="w-3.5 h-3.5 border-2 border-red-700 border-t-transparent rounded-full animate-spin"/><span>Injecting…</span></> : <><FileText className="w-3.5 h-3.5"/>Inject Support Ticket (CRITICAL)</>}
+          </button>
+          <button onClick={()=>handleInject('CUSTOMER_FEEDBACK')} disabled={!!injecting} className="inline-flex items-center justify-center gap-1.5 border border-violet-200 bg-violet-50 text-violet-700 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-violet-100 disabled:opacity-50">
+            {injecting==='CUSTOMER_FEEDBACK' ? <><div className="w-3.5 h-3.5 border-2 border-violet-700 border-t-transparent rounded-full animate-spin"/><span>Injecting…</span></> : <><Mail className="w-3.5 h-3.5"/>Inject Negative Feedback (CSAT 2)</>}
+          </button>
+        </div>
+        <div className="text-xs text-slate-500 mt-2">Each click <code className="bg-slate-100 px-1 py-0.5 rounded">POST /events</code> → <code className="bg-slate-100 px-1 py-0.5 rounded">SystemEventLog</code> → <code className="bg-slate-100 px-1 py-0.5 rounded">reassess_customer_risk</code> → timeline & signals update. Then <b>Run investigation</b> to see agent working (tools → report).</div>
+      </Card>
+
+      <Card>
         <SectionHeader title="Why this customer is at risk" subtitle="Evidence-linked explanation — not a black-box score" icon={ShieldAlert} />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
             <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-semibold">{Math.round(healthScore)}<span className="text-sm font-normal text-slate-400">/100</span></span>
-              <span className="text-sm flex items-center gap-1 text-slate-600"><TrendingDown className="w-4 h-4"/> {riskLevel}</span>
+              <span className="text-3xl font-semibold">{hasHealthScore ? Math.round(healthScore!) : "—"}<span className="text-sm font-normal text-slate-400">/100</span></span>
+              <span className="text-sm flex items-center gap-1 text-slate-600"><TrendingDown className="w-4 h-4"/> {riskLevel ?? "—"}</span>
               {risk?.confidence !==undefined && <span className="text-xs font-mono text-slate-500">Confidence {(risk.confidence*100).toFixed(0)}%</span>}
             </div>
             <div className="mt-3">
@@ -248,6 +283,33 @@ export const Customer360: React.FC<{customerId:string}> = ({customerId})=>{
                 <div className="mt-3 text-xs text-slate-500">Evidence, interpretation, recommendation, action, outcome, learning — keep them distinct. Human approval required before execution.</div>
               </div>
             )}
+            {/* Agent working trace — how it got the report */}
+            <div className="border border-slate-200 rounded-lg p-3 bg-white">
+              <div className="text-xs font-semibold flex items-center gap-1.5"><Activity className="w-3.5 h-3.5"/> Agent trace — how the report was produced (tools → state transitions)</div>
+              <div className="mt-2 space-y-1 max-h-40 overflow-auto pr-1">
+                {(result.state_history||[]).length===0 && <div className="text-xs text-slate-500">No state history — run was via fallback. Real runs show 12 transitions.</div>}
+                {(result.state_history||[]).slice(0,12).map((h:any,i:number)=>(
+                  <div key={i} className="flex items-center gap-2 text-xs font-mono">
+                    <span className="text-slate-400">{i+1}.</span>
+                    <span>{h.from} → {h.to}</span>
+                    {h.tool && <span className="bg-slate-900 text-white px-1.5 py-0.5 rounded text-[11px]">{h.tool}</span>}
+                    {h.latency_ms && <span className="text-slate-500">{h.latency_ms}ms</span>}
+                    {h.error && <span className="text-red-600 truncate max-w-[180px]">{h.error}</span>}
+                  </div>
+                ))}
+              </div>
+              {result.health_dimensions && (
+                <div className="mt-2 grid grid-cols-4 gap-1.5">
+                  {Object.entries(result.health_dimensions as any).map(([k,v]:any)=>(
+                    <div key={k} className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-center">
+                      <div className="text-[10px] font-mono text-slate-500 uppercase">{k}</div>
+                      <div className="text-sm font-semibold">{Math.round(Number(v))}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {result.structured_output && <details className="mt-2"><summary className="text-xs font-mono text-slate-600 cursor-pointer">structured_output (validated JSON)</summary><pre className="text-xs bg-slate-950 text-slate-200 rounded p-2 mt-1 overflow-auto max-h-32">{JSON.stringify(result.structured_output, null, 2)}</pre></details>}
+            </div>
           </div>
         )}
       </Card>

@@ -128,7 +128,7 @@ export const ActionCenter: React.FC = () => {
                           const total = (anyMem.success_count ?? 0) + (anyMem.failure_count ?? 0);
                           if (total > 0) return ((anyMem.success_count / total) * 100).toFixed(0) + '%';
                           if (typeof anyMem.confidence === 'number') return (anyMem.confidence * 100).toFixed(0) + '%';
-                          return '92%';
+                          return '—';
                         })()}
                       </div>
                     </div>

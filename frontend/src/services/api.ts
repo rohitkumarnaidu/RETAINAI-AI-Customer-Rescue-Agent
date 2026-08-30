@@ -49,3 +49,4 @@ export const getAllInterventions = async (): Promise<Intervention[]> => { const 
 export const getAllOutcomes = async (): Promise<InterventionOutcome[]> => { const r=await api.get<InterventionOutcome[]>('/outcomes'); return r.data; };
 export const getPortfolio = async (): Promise<{metrics:any;customers:Customer[]}> => { const r=await api.get('/portfolio'); return r.data; };
 export const getObservability = async (): Promise<any> => { const r=await api.get('/metrics/observability'); return r.data; };
+export const ingestEvent = async (customerId:string, eventType:string, payload:Record<string,any>): Promise<any> => { const r=await api.post('/events', {customer_id: customerId, event_type: eventType, payload}); return r.data; };

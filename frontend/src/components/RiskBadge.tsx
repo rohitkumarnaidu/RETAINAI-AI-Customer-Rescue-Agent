@@ -1,6 +1,7 @@
 import React from 'react';
 
 export const RiskBadge: React.FC<{level:string; size?:'sm'|'md'|'lg'; showDot?:boolean}> = ({level, size='md', showDot=true})=>{
+  // Fallback is HEALTHY (not WATCH); callers with truly unknown risk should render "—" instead of invoking RiskBadge — see Customer360.tsx
   const u = (level||'HEALTHY').toUpperCase();
   let cls='bg-teal-50 text-teal-700 border-teal-200';
   let dot='bg-teal-500';
