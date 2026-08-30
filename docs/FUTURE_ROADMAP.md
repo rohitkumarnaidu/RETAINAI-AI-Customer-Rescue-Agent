@@ -1,4 +1,4 @@
-# RETAINAI — Future Architectural Evolution Roadmap
+﻿# RETAINAI -- Future Architectural Evolution Roadmap
 
 ```text
                   RETAINAI
@@ -42,3 +42,4 @@
 ### Stage 6: Autonomous Playbook Execution & Multi-Agent Delegation (Future)
 - Automated execution of low-risk, pre-approved playbooks (e.g., triggering automated product walk-throughs or scheduling Calendly invites).
 - Enterprise role-based access control (RBAC), multi-tenancy, and SOC2 audit compliance.
+

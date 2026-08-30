@@ -1,4 +1,4 @@
-# SELECTED PROBLEM STATEMENT
+﻿# SELECTED PROBLEM STATEMENT
 
 ## 4. Customer Success Teams Missed Customers at Risk of Leaving
 
@@ -25,7 +25,7 @@
 **Autonomous Customer Retention Intelligence / Agentic Customer Success System**
 
 ### Working Product Concept
-**RETAINAI — The Autonomous Customer Rescue Agent**
+**RETAINAI -- The Autonomous Customer Rescue Agent**
 
 ### Core Promise
 **Sense. Think. Act. Learn.**
@@ -46,7 +46,7 @@ Do not build only:
 
 The system should demonstrate a **closed-loop agentic workflow**:
 
-**Customer signals → continuous monitoring → investigation → risk detection → explanation/root cause → next-best action → retention intervention → outcome observation → learning → improved future decisions**
+**Customer signals -> continuous monitoring -> investigation -> risk detection -> explanation/root cause -> next-best action -> retention intervention -> outcome observation -> learning -> improved future decisions**
 
 ### Always-On / Continuous Operation
 
@@ -66,7 +66,7 @@ Relevant events may include:
 
 Conceptual loop:
 
-**New signal/event → assess whether it matters → update customer health → trigger investigation when warranted → recommend action → observe outcome**
+**New signal/event -> assess whether it matters -> update customer health -> trigger investigation when warranted -> recommend action -> observe outcome**
 
 ### Self-Learning / Continuous-Learning Direction
 
@@ -74,7 +74,7 @@ RETAINAI should learn from **customer outcomes and human feedback**, rather than
 
 The MVP should implement an explicit learning loop:
 
-**Previous recommendation + action taken + customer response/outcome → evaluate intervention → extract useful learning → update strategy/experience memory → influence future recommendations**
+**Previous recommendation + action taken + customer response/outcome -> evaluate intervention -> extract useful learning -> update strategy/experience memory -> influence future recommendations**
 
 Examples of learning signals:
 - CSM accepted or rejected a recommendation
@@ -157,21 +157,21 @@ The preferred MVP direction is a **primary orchestrating agent with specialized 
 
 Conceptual architecture:
 
-**Customer Data → Signal Layer → Orchestrator Agent → Investigation → Risk Analysis → Root Cause → Action Planning → Retention Intervention → Outcome Evaluation → Learning/Experience Memory → Future Decisions**
+**Customer Data -> Signal Layer -> Orchestrator Agent -> Investigation -> Risk Analysis -> Root Cause -> Action Planning -> Retention Intervention -> Outcome Evaluation -> Learning/Experience Memory -> Future Decisions**
 
 ### Potential Agent Responsibilities
 
 These responsibilities may become independent agents only when doing so creates measurable architectural value:
 
-- **Orchestrator Agent** — coordinates the end-to-end investigation and decision workflow.
-- **Signal Analysis Agent/Module** — identifies meaningful changes and anomalies.
-- **Customer Investigation Agent** — gathers and synthesizes relevant customer evidence.
-- **Risk Agent/Module** — evaluates churn risk from structured evidence.
-- **Root Cause Agent** — explains the strongest likely reasons for risk.
-- **Action Planning Agent** — determines the next-best retention intervention.
-- **Retention Plan Agent** — produces a personalized action plan/message.
-- **Outcome Evaluation Agent** — determines whether an intervention produced a useful result.
-- **Learning Agent** — converts validated outcomes and feedback into reusable experience/strategy information.
+- **Orchestrator Agent** -- coordinates the end-to-end investigation and decision workflow.
+- **Signal Analysis Agent/Module** -- identifies meaningful changes and anomalies.
+- **Customer Investigation Agent** -- gathers and synthesizes relevant customer evidence.
+- **Risk Agent/Module** -- evaluates churn risk from structured evidence.
+- **Root Cause Agent** -- explains the strongest likely reasons for risk.
+- **Action Planning Agent** -- determines the next-best retention intervention.
+- **Retention Plan Agent** -- produces a personalized action plan/message.
+- **Outcome Evaluation Agent** -- determines whether an intervention produced a useful result.
+- **Learning Agent** -- converts validated outcomes and feedback into reusable experience/strategy information.
 
 ### Important Multi-Agent Rule
 
@@ -188,7 +188,7 @@ Each independent agent must have:
 
 If one agent plus tools can perform a responsibility reliably, prefer the simpler architecture.
 
-## Core Agent Tools — Candidate Set
+## Core Agent Tools -- Candidate Set
 
 The exact tool set will be finalized during architecture, but may include:
 
@@ -213,7 +213,7 @@ Tool permissions, schemas, validation, retries, and failure handling must be def
 
 The central intelligence loop is:
 
-**SENSE → THINK → ACT → MEASURE → LEARN → SENSE AGAIN**
+**SENSE -> THINK -> ACT -> MEASURE -> LEARN -> SENSE AGAIN**
 
 ### SENSE
 Collect or detect relevant customer signals.
@@ -312,7 +312,7 @@ For every section:
 
 ---
 
-# HACKATHON — UNIVERSAL END-TO-END MASTER LIFECYCLE
+# HACKATHON -- UNIVERSAL END-TO-END MASTER LIFECYCLE
 
 > Universal template for **any hackathon format**: open-ended, problem-statement based, sponsor-track, theme-based, API/platform, AI/ML, hardware/IoT, web/mobile, developer tools, social impact, research, design, startup, offline, online, solo, or team-based.
 >
@@ -320,7 +320,7 @@ For every section:
 >
 > **Operating rule:** validate the problem first, build the smallest convincing end-to-end solution, optimize for the actual judging rubric, protect the demo path, and keep evidence for every important claim.
 
-## UNIVERSAL 00.0 — Determine the Hackathon Type
+## UNIVERSAL 00.0 -- Determine the Hackathon Type
 ### Identify open-ended vs problem-statement based
 ### Identify theme-based vs unrestricted
 ### Identify sponsor challenge vs main challenge
@@ -345,7 +345,7 @@ For every section:
 ### Identify timezone and deadline interpretation
 ### Record every rule and source
 
-## UNIVERSAL 00.1 — Choose the Challenge / Problem
+## UNIVERSAL 00.1 -- Choose the Challenge / Problem
 ### List all eligible challenges
 ### Normalize challenge statements
 ### Extract target users
@@ -362,7 +362,7 @@ For every section:
 ### Select backup challenge
 ### Freeze challenge selection time
 
-## UNIVERSAL 00.2 — Convert the Brief into a Working Brief
+## UNIVERSAL 00.2 -- Convert the Brief into a Working Brief
 ### One-line challenge
 ### One-line user
 ### One-line pain
@@ -1602,75 +1602,75 @@ For every section:
 
 # 33. COMPLETE HACKATHON EXECUTION GATE
 
-## Gate 01 — Problem
+## Gate 01 -- Problem
 ### Problem is clearly defined
 ### User is clear
 ### Pain is real
 
-## Gate 02 — Evidence
+## Gate 02 -- Evidence
 ### Research completed
 ### Existing solutions reviewed
 ### Gap identified
 
-## Gate 03 — Solution
+## Gate 03 -- Solution
 ### Solution selected
 ### Differentiator defined
 ### Value proposition defined
 
-## Gate 04 — Scope
+## Gate 04 -- Scope
 ### MVP defined
 ### Cut list defined
 ### Demo path defined
 
-## Gate 05 — Product
+## Gate 05 -- Product
 ### User flow defined
 ### UX defined
 ### Requirements defined
 
-## Gate 06 — Architecture
+## Gate 06 -- Architecture
 ### Architecture defined
 ### Data flow defined
 ### Failure paths defined
 
-## Gate 07 — AI/Agent
+## Gate 07 -- AI/Agent
 ### AI role justified
 ### Model selected
 ### Prompts/tools defined
 ### Guardrails defined
 ### Evaluation defined
 
-## Gate 08 — Build
+## Gate 08 -- Build
 ### Backend complete
 ### Frontend complete
 ### Integrations complete
 ### Database complete
 
-## Gate 09 — Quality
+## Gate 09 -- Quality
 ### Tests pass
 ### AI evaluated
 ### Agent evaluated
 ### Security checked
 ### Performance checked
 
-## Gate 10 — Deployment
+## Gate 10 -- Deployment
 ### Application deployed
 ### Health checked
 ### Smoke test passed
 
-## Gate 11 — Demo
+## Gate 11 -- Demo
 ### Demo scenario stable
 ### Backup ready
 ### Pitch ready
 ### Q&A ready
 
-## Gate 12 — Submission
+## Gate 12 -- Submission
 ### All assets ready
 ### Links verified
 ### Repository verified
 ### Form verified
 ### Submission confirmed
 
-## Gate 13 — Post-Hackathon
+## Gate 13 -- Post-Hackathon
 ### Feedback captured
 ### Learnings captured
 ### Startup potential assessed
@@ -1678,7 +1678,7 @@ For every section:
 
 ---
 
-# 34. MICRO-CHECKLIST — EVERY FEATURE
+# 34. MICRO-CHECKLIST -- EVERY FEATURE
 
 ## Before Building Feature
 ### User need
@@ -1712,7 +1712,7 @@ For every section:
 
 ---
 
-# 35. MICRO-CHECKLIST — EVERY AI/AGENT FEATURE
+# 35. MICRO-CHECKLIST -- EVERY AI/AGENT FEATURE
 
 ## Before Building
 ### Objective
@@ -1748,7 +1748,7 @@ For every section:
 
 ---
 
-# 36. MICRO-CHECKLIST — EVERY RELEASE
+# 36. MICRO-CHECKLIST -- EVERY RELEASE
 
 ## Build
 ### Code complete
@@ -1786,37 +1786,37 @@ For every section:
 
 # 37. MASTER ORDER OF EXECUTION
 
-## Phase 1 — Understand
+## Phase 1 -- Understand
 ### Rules
 ### Problem
 ### Users
 ### Constraints
 
-## Phase 2 — Research
+## Phase 2 -- Research
 ### Domain
 ### Users
 ### Competitors
 ### Existing approaches
 ### Evidence
 
-## Phase 3 — Validate
+## Phase 3 -- Validate
 ### Problem severity
 ### User fit
 ### Hackathon fit
 ### Assumptions
 
-## Phase 4 — Discover
+## Phase 4 -- Discover
 ### Ideas
 ### Compare
 ### Select
 
-## Phase 5 — Define
+## Phase 5 -- Define
 ### Product
 ### Workflow
 ### Requirements
 ### MVP scope
 
-## Phase 6 — Design
+## Phase 6 -- Design
 ### UX
 ### UI
 ### Architecture
@@ -1824,7 +1824,7 @@ For every section:
 ### AI/agent
 ### Security
 
-## Phase 7 — Build
+## Phase 7 -- Build
 ### Repo
 ### Backend
 ### Frontend
@@ -1833,7 +1833,7 @@ For every section:
 ### Agents
 ### Integrations
 
-## Phase 8 — Verify
+## Phase 8 -- Verify
 ### Unit tests
 ### Integration tests
 ### E2E tests
@@ -1842,37 +1842,37 @@ For every section:
 ### Security
 ### Performance
 
-## Phase 9 — Polish
+## Phase 9 -- Polish
 ### UX
 ### Reliability
 ### Performance
 ### Accessibility
 ### Observability
 
-## Phase 10 — Deploy
+## Phase 10 -- Deploy
 ### Infrastructure
 ### CI/CD
 ### Production-like environment
 ### Smoke test
 
-## Phase 11 — Prove
+## Phase 11 -- Prove
 ### Metrics
 ### Demo scenario
 ### Impact evidence
 
-## Phase 12 — Present
+## Phase 12 -- Present
 ### Pitch
 ### Demo
 ### Q&A
 
-## Phase 13 — Submit
+## Phase 13 -- Submit
 ### Assets
 ### Links
 ### Form
 ### Video
 ### Confirmation
 
-## Phase 14 — Learn
+## Phase 14 -- Learn
 ### Judge feedback
 ### User feedback
 ### Retrospective
@@ -1974,3 +1974,4 @@ For every section:
 ## Tell a Clear Story
 ## Submit Without Missing Anything
 ## Capture Everything Learned
+
