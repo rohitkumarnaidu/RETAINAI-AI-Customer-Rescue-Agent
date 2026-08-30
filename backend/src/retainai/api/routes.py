@@ -1,14 +1,18 @@
 """FastAPI REST API Routes for RETAINAI Customer Retention Platform."""
 
+import csv
+import io
+import re
 import uuid
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from retainai.db.session import get_db
 from retainai.auth.auth import get_current_user
-from retainai.db.models import Intervention, InterventionStatus, InterventionOutcome
+from retainai.db.models import Customer, RiskLevel, Intervention, InterventionStatus, InterventionOutcome
 from retainai.repositories.customer_repository import CustomerRepository
 from retainai.repositories.evidence_repository import EvidenceRepository
 from retainai.repositories.memory_repository import MemoryRepository
@@ -67,6 +71,257 @@ async def list_customers(
     return await repo.list_all_paginated(
         limit=limit, offset=offset, risk_level=risk_level, segment=segment, search=search, sort_by=sort_by, sort_order=sort_order
     )
+
+
+@router.post("/customers", response_model=CustomerSchema)
+async def create_customer(payload: Dict[str, Any], db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
+    """Create a single customer — for Add Customer form + CSV single-row."""
+    name = str(payload.get("name") or "").strip()
+    if not name or len(name) < 2:
+        raise HTTPException(status_code=422, detail="name is required (min 2 chars)")
+    domain = str(payload.get("domain") or f"{re.sub(r'[^a-z0-9]+','-',name.lower()).strip('-')}.com").strip().lower()
+    # Parse helpers
+    def _float(v, default=0.0):
+        try:
+            return float(str(v).replace(",","").replace("$","").strip() or default)
+        except Exception:
+            return float(default)
+    def _int(v, default=0):
+        try:
+            return int(float(str(v).replace(",","").strip() or default))
+        except Exception:
+            return int(default)
+    segment = str(payload.get("segment") or "MidMarket").strip() or "MidMarket"
+    industry = str(payload.get("industry") or "Software").strip() or "Software"
+    plan = str(payload.get("plan") or "Growth Tier").strip() or "Growth Tier"
+    csm_name = str(payload.get("csm_name") or payload.get("csm") or "Alex Morgan").strip() or "Alex Morgan"
+    csm_email = str(payload.get("csm_email") or "alex@retainai.io").strip() or "alex@retainai.io"
+    arr = _float(payload.get("arr", 36000), 36000)
+    mrr = _float(payload.get("mrr", arr/12), arr/12)
+    health_score = max(0.0, min(100.0, _float(payload.get("health_score", 85), 85)))
+    status = str(payload.get("status") or "ACTIVE").strip().upper() or "ACTIVE"
+    # Risk level auto-derive if not provided
+    risk_level_raw = str(payload.get("risk_level") or "").strip().upper()
+    if risk_level_raw not in {"HEALTHY","STABLE","WATCH","AT_RISK","HIGH_RISK","CRITICAL"}:
+        # derive from health
+        if health_score >= 90: risk_level_raw = "HEALTHY"
+        elif health_score >= 80: risk_level_raw = "STABLE"
+        elif health_score >= 60: risk_level_raw = "WATCH"
+        elif health_score >= 40: risk_level_raw = "AT_RISK"
+        elif health_score >= 20: risk_level_raw = "HIGH_RISK"
+        else: risk_level_raw = "CRITICAL"
+    # Dates
+    today = date.today()
+    try:
+        start_date = date.fromisoformat(str(payload.get("start_date")) ) if payload.get("start_date") else today - timedelta(days=180)
+    except Exception:
+        start_date = today - timedelta(days=180)
+    try:
+        renewal_date = date.fromisoformat(str(payload.get("renewal_date"))) if payload.get("renewal_date") else today + timedelta(days=90)
+    except Exception:
+        renewal_date = today + timedelta(days=90)
+    # ID generation
+    cid = str(payload.get("id") or payload.get("customer_id") or f"cust_{uuid.uuid4().hex[:8]}").strip()
+    if len(cid) > 50:
+        cid = cid[:50]
+    # Duplicate check
+    existing = await db.execute(select(Customer).where(Customer.id == cid))
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=409, detail=f"Customer id {cid} already exists")
+    # Domain duplicate soft check — allow but warn via header? just allow
+    customer = Customer(
+        id=cid,
+        name=name,
+        domain=domain,
+        segment=segment,
+        industry=industry,
+        plan=plan,
+        mrr=mrr,
+        arr=arr,
+        csm_name=csm_name,
+        csm_email=csm_email,
+        start_date=start_date,
+        renewal_date=renewal_date,
+        status=status,
+        health_score=round(float(health_score),1),
+        risk_level=RiskLevel(risk_level_raw),
+        is_false_positive_candidate=bool(payload.get("is_false_positive_candidate", False)),
+    )
+    db.add(customer)
+    try:
+        await db.commit()
+        await db.refresh(customer)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Create failed: {str(e)[:300]}")
+    return customer
+
+
+@router.post("/customers/upload")
+async def upload_customers_csv(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Bulk CSV upload — creates many customers. Max 500 rows, 2MB file."""
+    # Guards
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=422, detail="File must be a .csv")
+    content = await file.read()
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="CSV too large (max 2MB, ~500 customers)")
+    if len(content) == 0:
+        raise HTTPException(status_code=422, detail="Empty CSV")
+    try:
+        text = content.decode("utf-8-sig")
+    except Exception:
+        try:
+            text = content.decode("latin-1")
+        except Exception:
+            raise HTTPException(status_code=422, detail="Cannot decode CSV — use UTF-8")
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames is None:
+        raise HTTPException(status_code=422, detail="CSV missing header row")
+    # Normalize headers lower
+    normalized_fields = [ (h or "").strip().lower() for h in reader.fieldnames ]
+    # Required alias map
+    header_map = { h.lower().strip(): h for h in reader.fieldnames if h }
+    # Validate must have at least name
+    if "name" not in normalized_fields:
+        raise HTTPException(status_code=422, detail="CSV must contain 'name' column. Required: name. Optional: domain, segment, industry, plan, arr, mrr, csm_name, csm_email, health_score, risk_level, renewal_date, status")
+    rows = list(reader)
+    if len(rows) == 0:
+        raise HTTPException(status_code=422, detail="CSV contains no data rows")
+    if len(rows) > 500:
+        raise HTTPException(status_code=422, detail=f"Too many rows ({len(rows)}), max 500 per upload. Split your file.")
+    # Helpers
+    def _f(v, default=0.0):
+        try:
+            if v is None or str(v).strip() == "":
+                return float(default)
+            return float(str(v).replace(",","").replace("$","").strip())
+        except Exception:
+            return float(default)
+    created = 0
+    skipped = 0
+    errors: List[Dict[str, Any]] = []
+    seen_ids: set = set()
+    today = date.today()
+    for idx, raw in enumerate(rows, start=2):  # 1 is header, so 2 is first data row
+        # Normalize row keys lower
+        row = { (k or "").strip().lower(): (v.strip() if isinstance(v, str) else v) for k, v in raw.items() }
+        name = str(row.get("name") or "").strip()
+        if not name:
+            skipped += 1
+            errors.append({"row": idx, "error": "Missing 'name' — row skipped"})
+            continue
+        # Build domain if empty
+        domain = str(row.get("domain") or "").strip().lower()
+        if not domain:
+            slug = re.sub(r'[^a-z0-9]+','-', name.lower()).strip('-') or f"customer-{idx}"
+            domain = f"{slug}.com"
+        # Dupe id handling
+        raw_id = str(row.get("id") or row.get("customer_id") or "").strip()
+        cid = raw_id if raw_id else f"cust_{uuid.uuid4().hex[:8]}"
+        if len(cid) > 50:
+            cid = cid[:50]
+        if cid in seen_ids:
+            cid = f"cust_{uuid.uuid4().hex[:8]}"
+        seen_ids.add(cid)
+        # Check DB duplicate
+        try:
+            existing = await db.execute(select(Customer.id).where(Customer.id == cid).limit(1))
+            if existing.scalar_one_or_none() is not None:
+                skipped += 1
+                errors.append({"row": idx, "id": cid, "name": name, "error": f"Duplicate id {cid} — skipped (use unique id column)"})
+                continue
+        except Exception:
+            pass
+        segment = str(row.get("segment") or "MidMarket").strip() or "MidMarket"
+        industry = str(row.get("industry") or "Software").strip() or "Software"
+        plan = str(row.get("plan") or "Growth Tier").strip() or "Growth Tier"
+        csm_name = str(row.get("csm_name") or row.get("csm") or "Alex Morgan").strip() or "Alex Morgan"
+        csm_email = str(row.get("csm_email") or "alex@retainai.io").strip() or "alex@retainai.io"
+        arr = _f(row.get("arr", 36000), 36000)
+        mrr_val = row.get("mrr")
+        mrr = _f(mrr_val, arr/12) if mrr_val not in (None, "") else arr/12
+        health_score = max(0.0, min(100.0, _f(row.get("health_score", 85), 85)))
+        status = str(row.get("status") or "ACTIVE").strip().upper() or "ACTIVE"
+        risk_raw = str(row.get("risk_level") or row.get("risk") or "").strip().upper()
+        if risk_raw not in {"HEALTHY","STABLE","WATCH","AT_RISK","HIGH_RISK","CRITICAL"}:
+            if health_score >= 90: risk_raw = "HEALTHY"
+            elif health_score >= 80: risk_raw = "STABLE"
+            elif health_score >= 60: risk_raw = "WATCH"
+            elif health_score >= 40: risk_raw = "AT_RISK"
+            elif health_score >= 20: risk_raw = "HIGH_RISK"
+            else: risk_raw = "CRITICAL"
+        try:
+            start_date = date.fromisoformat(str(row.get("start_date")).strip()) if row.get("start_date") and str(row.get("start_date")).strip() else today - timedelta(days=180)
+        except Exception:
+            start_date = today - timedelta(days=180)
+        try:
+            renewal_date = date.fromisoformat(str(row.get("renewal_date")).strip()) if row.get("renewal_date") and str(row.get("renewal_date")).strip() else today + timedelta(days=90)
+        except Exception:
+            renewal_date = today + timedelta(days=90)
+        try:
+            risk_enum = RiskLevel(risk_raw)
+        except Exception:
+            risk_enum = RiskLevel.WATCH
+        customer = Customer(
+            id=cid,
+            name=name,
+            domain=domain,
+            segment=segment,
+            industry=industry,
+            plan=plan,
+            mrr=float(mrr),
+            arr=float(arr),
+            csm_name=csm_name,
+            csm_email=csm_email,
+            start_date=start_date,
+            renewal_date=renewal_date,
+            status=status,
+            health_score=round(float(health_score),1),
+            risk_level=risk_enum,
+            is_false_positive_candidate=str(row.get("is_false_positive_candidate","")).lower() in ("1","true","yes"),
+        )
+        db.add(customer)
+        try:
+            await db.flush()
+            created += 1
+        except Exception as e:
+            await db.rollback()
+            skipped += 1
+            errors.append({"row": idx, "name": name, "error": str(e)[:200]})
+            # re-add session state clean
+            continue
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Commit failed: {str(e)[:300]}")
+    return {
+        "status": "success",
+        "created": created,
+        "skipped": skipped,
+        "total_rows": len(rows),
+        "errors": errors[:20],  # cap
+        "message": f"Imported {created} customers, skipped {skipped} of {len(rows)} rows",
+    }
+
+
+@router.get("/customers/template/csv")
+async def download_customer_csv_template(user: dict = Depends(get_current_user)):
+    """Returns CSV template info — frontend generates file client-side but this documents schema."""
+    headers = ["name","domain","segment","industry","plan","arr","mrr","csm_name","csm_email","health_score","risk_level","renewal_date","status"]
+    sample = ["Acme Corp","acme.com","Enterprise","FinTech","Enterprise Tier","180000","15000","Alex Morgan","alex@retainai.io","42","CRITICAL","2026-09-15","ACTIVE"]
+    return {
+        "headers": headers,
+        "sample_row": sample,
+        "filename": "retainai_customers_template.csv",
+        "csv_text": ",".join(headers) + "\n" + ",".join(sample) + "\n",
+        "notes": "Required: name. All others optional. health_score 0-100 auto-sets risk_level if omitted. renewal_date YYYY-MM-DD.",
+    }
 
 
 @router.get("/customers/{customer_id}", response_model=CustomerSchema)

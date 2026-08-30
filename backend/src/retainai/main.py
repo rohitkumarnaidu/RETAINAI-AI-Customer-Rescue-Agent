@@ -52,17 +52,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Simple in-memory rate limiting (S63/S42 minimal) — 120 req/min per IP for API routes
+# Simple in-memory rate limiting (S63/S42 minimal) — demo-friendly: 600 req/min per IP for API routes; disabled in DEMO_MODE for hackathon reliability
 from collections import defaultdict
 _rate_bucket: dict[str, list[float]] = defaultdict(list)
-_RATE_LIMIT = 120  # req per 60s
+_RATE_LIMIT = 600  # req per 60s — increased from 120 to avoid demo 429 when hammering /portfolio + E2E scripts
 _RATE_WINDOW = 60
 
 # Request ID + observability + rate limiting middleware (S48/S49)
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
-    # Rate limit only API routes, not /health /readiness
-    if request.url.path.startswith("/api/"):
+    # Rate limit only API routes, not /health /readiness; bypass in DEMO_MODE to keep hackathon demo reliable
+    if request.url.path.startswith("/api/") and not settings.DEMO_MODE:
         ip = request.client.host if request.client else "unknown"
         now = time.time()
         bucket = _rate_bucket[ip]
