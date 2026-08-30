@@ -7,7 +7,7 @@ from typing import List
 
 from retainai.db.session import get_db
 from retainai.db.models import ExperienceMemory, Intervention, InterventionOutcome
-from retainai.models.schemas import ExperienceMemorySchema, InterventionSchema, InterventionOutcomeSchema
+from retainai.models.schemas import ExperienceMemorySchema, InterventionSchema, OutcomeSchema as InterventionOutcomeSchema
 
 router = APIRouter(prefix="/api/v1", tags=["Experience & Actions"])
 
@@ -15,7 +15,8 @@ router = APIRouter(prefix="/api/v1", tags=["Experience & Actions"])
 @router.get("/experience-memory", response_model=List[ExperienceMemorySchema])
 async def list_experience_memory(db: AsyncSession = Depends(get_db)):
     """List all experience memories (learned insights)."""
-    result = await db.execute(select(ExperienceMemory).order_by(ExperienceMemory.last_updated.desc()))
+    # Orphaned route legacy: last_updated is actually updated_at; use updated_at for ordering
+    result = await db.execute(select(ExperienceMemory).order_by(ExperienceMemory.updated_at.desc()))
     return result.scalars().all()
 
 

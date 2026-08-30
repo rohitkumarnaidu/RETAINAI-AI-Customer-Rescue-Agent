@@ -33,6 +33,22 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = "mock_key_for_dev"
 
     API_V1_PREFIX: str = "/api/v1"
+    CORS_ORIGINS: list[str] = Field(default=["http://localhost:5173", "http://127.0.0.1:5173"])
+    DEMO_MODE: bool = True
+    LOG_LEVEL: str = "INFO"
+    AUTH_ENABLED: bool = False
+    AUTH_SECRET: str = "retainai-dev-secret-change-in-prod"
+    DEMO_API_KEY: str = "demo-key-retainai-2026"
+
+    # Timeouts & Retry (S62/S63)
+    AGENT_TIMEOUT: int = 60
+    LLM_TIMEOUT: float = 10.0
+    LLM_MAX_RETRIES: int = 2
+    DB_TIMEOUT: float = 5.0
+
+    # Dynamic System Prompt (S: Make system prompts configurable / dynamic)
+    INVESTIGATION_SYSTEM_PROMPT: str = ""
+    ACTION_SYSTEM_PROMPT: str = ""
 
     # Health Weights Engine Config
     HEALTH_WEIGHT_USAGE: float = 0.40

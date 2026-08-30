@@ -1,11 +1,11 @@
 """Agentic REST API Routes for RETAINAI Autonomous Customer Rescue Agent."""
 
-from typing import Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from retainai.db.session import get_db
+from retainai.auth.auth import get_current_user
 from retainai.db.models import AgentRun
 from retainai.agents.orchestrator import AgentOrchestrator
 from retainai.demo.acme_replay import AcmeReplayEngine
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/v1/agent", tags=["Agent Operations"])
 
 
 @router.post("/investigate/{customer_id}")
-async def trigger_agent_investigation(customer_id: str, db: AsyncSession = Depends(get_db)):
+async def trigger_agent_investigation(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Triggers the Agent Orchestrator to investigate customer telemetry and generate next-best action."""
     orchestrator = AgentOrchestrator(db)
     try:
@@ -24,7 +24,7 @@ async def trigger_agent_investigation(customer_id: str, db: AsyncSession = Depen
 
 
 @router.post("/{customer_id}/investigate")
-async def trigger_agent_investigation_alias(customer_id: str, db: AsyncSession = Depends(get_db)):
+async def trigger_agent_investigation_alias(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     orchestrator = AgentOrchestrator(db)
     try:
         return await orchestrator.run_full_rescue_workflow(customer_id)
@@ -33,7 +33,7 @@ async def trigger_agent_investigation_alias(customer_id: str, db: AsyncSession =
 
 
 @router.get("/runs/{customer_id}")
-async def list_agent_runs(customer_id: str, db: AsyncSession = Depends(get_db)):
+async def list_agent_runs(customer_id: str, db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)):
     """Retrieves audit run history for an agent workflow on a customer."""
     res = await db.execute(
         select(AgentRun)
@@ -60,7 +60,7 @@ async def list_agent_runs(customer_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/demo/replay_acme_step")
 async def replay_acme_scenario_step(
-    step: str = "friction", intervention_id: str = "inv_acme_001", db: AsyncSession = Depends(get_db)
+    step: str = "friction", intervention_id: str = "inv_acme_001", db: AsyncSession = Depends(get_db), user: dict = Depends(get_current_user)
 ):
     """Demo Helper Endpoint: Replays Acme scenario story steps ('healthy', 'friction', 'recovery')."""
     engine = AcmeReplayEngine(db)

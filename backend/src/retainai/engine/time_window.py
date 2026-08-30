@@ -1,7 +1,7 @@
 """Time-Window Engine for deterministic moving-average and period comparisons."""
 
 from dataclasses import dataclass
-from typing import List, Sequence, Optional
+from typing import List, Sequence
 from datetime import datetime, timedelta, timezone
 from retainai.db.models import UsageEvent
 

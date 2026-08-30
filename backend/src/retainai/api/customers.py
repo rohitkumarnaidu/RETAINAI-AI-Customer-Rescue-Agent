@@ -34,7 +34,7 @@ async def get_customer_risk(customer_id: str, db: AsyncSession = Depends(get_db)
     result = await db.execute(
         select(RiskAssessment)
         .where(RiskAssessment.customer_id == customer_id)
-        .order_by(RiskAssessment.timestamp.desc())
+        .order_by(RiskAssessment.created_at.desc())
     )
     return result.scalars().all()
 

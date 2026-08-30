@@ -1,12 +1,11 @@
 """Telemetry Repository for Usage Events, Support Tickets, Customer Feedback, and Account Events."""
 
-from typing import List, Optional
+from typing import List
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from retainai.db.models import (
     UsageEvent,
-    FeatureAdoption,
     SupportTicket,
     CustomerFeedback,
     AccountEvent,

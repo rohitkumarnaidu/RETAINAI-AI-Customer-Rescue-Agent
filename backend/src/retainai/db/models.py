@@ -57,6 +57,12 @@ class ValidationStatus(str, Enum):
     CANDIDATE = "CANDIDATE"
     VALIDATED = "VALIDATED"
     REJECTED = "REJECTED"
+    PENDING_VALIDATION = "PENDING_VALIDATION"
+    WEAKENED = "WEAKENED"
+    CONTRADICTED = "CONTRADICTED"
+    STALE = "STALE"
+    REVOKED = "REVOKED"
+    ARCHIVED = "ARCHIVED"
 
 
 class AgentRunStatus(str, Enum):
@@ -291,7 +297,11 @@ class InvestigationReport(Base):
     risk_assessment: Mapped["RiskAssessment"] = relationship(back_populates="investigation_reports")
     interventions: Mapped[List["Intervention"]] = relationship(back_populates="investigation")
 
-    __table_args__ = ({"extend_existing": True},)
+    __table_args__ = (
+        Index("idx_investigation_customer", "customer_id"),
+        Index("idx_investigation_risk", "risk_assessment_id"),
+        {"extend_existing": True},
+    )
 
 
 class Intervention(Base):
@@ -300,15 +310,23 @@ class Intervention(Base):
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     investigation_id: Mapped[str] = mapped_column(ForeignKey("investigation_reports.id"), nullable=False)
+    recommendation_id: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     action_type: Mapped[str] = mapped_column(String(100), nullable=False)
     title: Mapped[str] = mapped_column(String(150), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     plan: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    evidence_ids: Mapped[List[str]] = mapped_column(JSON, default=list)
+    approved_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    expected_outcome: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    success_metric: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    priority: Mapped[str] = mapped_column(String(20), default="MEDIUM")
+    requires_approval: Mapped[bool] = mapped_column(Boolean, default=True)
     status: Mapped[InterventionStatus] = mapped_column(SQLEnum(InterventionStatus), default=InterventionStatus.PROPOSED)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    approved_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     customer: Mapped["Customer"] = relationship(back_populates="interventions")
     investigation: Mapped["InvestigationReport"] = relationship(back_populates="interventions")
@@ -328,12 +346,19 @@ class InterventionOutcome(Base):
     intervention_id: Mapped[str] = mapped_column(ForeignKey("interventions.id"), nullable=False)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     status: Mapped[OutcomeStatus] = mapped_column(SQLEnum(OutcomeStatus), default=OutcomeStatus.PENDING)
+    outcome: Mapped[str] = mapped_column(String(20), default="UNKNOWN")  # SUCCESS|PARTIAL|FAILED|UNKNOWN
     health_before: Mapped[float] = mapped_column(Float, nullable=False)
     health_after: Mapped[float] = mapped_column(Float, nullable=False)
     health_delta: Mapped[float] = mapped_column(Float, nullable=False)
     usage_before: Mapped[float] = mapped_column(Float, default=0.0)
     usage_after: Mapped[float] = mapped_column(Float, default=0.0)
+    before_metrics: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    after_metrics: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    observations: Mapped[List[str]] = mapped_column(JSON, default=list)
+    evidence_ids: Mapped[List[str]] = mapped_column(JSON, default=list)
+    time_window: Mapped[str] = mapped_column(String(20), default="14d")
     customer_response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     support_resolution: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -342,7 +367,11 @@ class InterventionOutcome(Base):
 
     intervention: Mapped["Intervention"] = relationship(back_populates="outcome")
 
-    __table_args__ = ({"extend_existing": True},)
+    __table_args__ = (
+        Index("idx_outcome_intervention", "intervention_id"),
+        Index("idx_outcome_customer", "customer_id"),
+        {"extend_existing": True},
+    )
 
 
 class ExperienceMemory(Base):
@@ -351,22 +380,104 @@ class ExperienceMemory(Base):
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    last_observed: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     context_pattern: Mapped[str] = mapped_column(String(150), nullable=False)
+    pattern: Mapped[str] = mapped_column(String(150), nullable=False, default="")
     customer_segment: Mapped[str] = mapped_column(String(100), nullable=False)
     risk_pattern: Mapped[str] = mapped_column(String(150), nullable=False)
     signals: Mapped[List[str]] = mapped_column(JSON, default=list)
     recommended_strategy: Mapped[str] = mapped_column(Text, nullable=False)
+    recommended_intervention: Mapped[str] = mapped_column(Text, nullable=False, default="")
     actual_action: Mapped[str] = mapped_column(Text, nullable=False)
     observed_outcome: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, default=0.8)
     validation_status: Mapped[ValidationStatus] = mapped_column(SQLEnum(ValidationStatus), default=ValidationStatus.CANDIDATE)
+    status: Mapped[str] = mapped_column(String(30), default="VALIDATED")
     success_count: Mapped[int] = mapped_column(Integer, default=1)
     failure_count: Mapped[int] = mapped_column(Integer, default=0)
+    sample_size: Mapped[int] = mapped_column(Integer, default=1)
+    success_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    source_intervention_ids: Mapped[List[str]] = mapped_column(JSON, default=list)
     evidence_ids: Mapped[List[str]] = mapped_column(JSON, default=list)
+    contexts: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, default=list)
+    version: Mapped[str] = mapped_column(String(20), default="v1.0")
 
     __table_args__ = (
         Index("idx_memory_segment", "customer_segment"),
         Index("idx_memory_validation", "validation_status"),
+        {"extend_existing": True},
+    )
+
+
+class AgentState(str, Enum):
+    RECEIVED = "RECEIVED"
+    SIGNAL_ANALYSIS = "SIGNAL_ANALYSIS"
+    INVESTIGATING = "INVESTIGATING"
+    RISK_ASSESSMENT = "RISK_ASSESSMENT"
+    ROOT_CAUSE_ANALYSIS = "ROOT_CAUSE_ANALYSIS"
+    ACTION_PLANNING = "ACTION_PLANNING"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    ACTION_EXECUTED = "ACTION_EXECUTED"
+    OBSERVING_OUTCOME = "OBSERVING_OUTCOME"
+    OUTCOME_EVALUATION = "OUTCOME_EVALUATION"
+    LEARNING_CANDIDATE = "LEARNING_CANDIDATE"
+    VALIDATION = "VALIDATION"
+    MEMORY_UPDATED = "MEMORY_UPDATED"
+    COMPLETED = "COMPLETED"
+    # Failure states
+    TOOL_FAILED = "TOOL_FAILED"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+    MODEL_FAILED = "MODEL_FAILED"
+    VALIDATION_FAILED = "VALIDATION_FAILED"
+    PERMISSION_DENIED = "PERMISSION_DENIED"
+    TIMEOUT = "TIMEOUT"
+    HUMAN_ESCALATION = "HUMAN_ESCALATION"
+    CANCELLED = "CANCELLED"
+
+
+class AgentStep(Base):
+    __tablename__ = "agent_steps"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("agent_runs.id"), nullable=False)
+    step_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    state: Mapped[str] = mapped_column(String(50), nullable=False, default=AgentState.RECEIVED.value)
+    input_reference: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    output_reference: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tool_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="SUCCESS")
+    latency_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("idx_agent_steps_run", "run_id"),
+        {"extend_existing": True},
+    )
+
+
+class LearningCandidate(Base):
+    __tablename__ = "learning_candidates"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    intervention_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    pattern: Mapped[str] = mapped_column(Text, nullable=False)
+    context_json: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    intervention_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    observed_outcome: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_ids: Mapped[List[str]] = mapped_column(JSON, default=list)
+    source_intervention_ids: Mapped[List[str]] = mapped_column(JSON, default=list)
+    sample_size: Mapped[int] = mapped_column(Integer, default=1)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(30), default="PENDING_VALIDATION")
+    validation_status: Mapped[ValidationStatus] = mapped_column(SQLEnum(ValidationStatus), default=ValidationStatus.CANDIDATE)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("idx_candidates_customer", "customer_id"),
+        Index("idx_candidates_status", "status"),
         {"extend_existing": True},
     )
 
@@ -381,14 +492,25 @@ class AgentRun(Base):
     status: Mapped[AgentRunStatus] = mapped_column(SQLEnum(AgentRunStatus), default=AgentRunStatus.RUNNING)
     workflow_type: Mapped[str] = mapped_column(String(100), nullable=False, default="INVESTIGATION_RESCUE")
     model: Mapped[str] = mapped_column(String(50), nullable=False, default="gemini-2.5-flash")
+    model_version: Mapped[str] = mapped_column(String(50), nullable=False, default="v2.1")
+    prompt_version: Mapped[str] = mapped_column(String(50), nullable=False, default="investigate-v2")
+    current_state: Mapped[str] = mapped_column(String(50), nullable=False, default=AgentState.RECEIVED.value)
+    total_steps: Mapped[int] = mapped_column(Integer, default=0)
     input_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     output_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    final_decision: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     tool_calls: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, default=list)
+    state_history: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, default=list)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     customer: Mapped["Customer"] = relationship(back_populates="agent_runs")
 
-    __table_args__ = ({"extend_existing": True},)
+    __table_args__ = (
+        Index("idx_agent_runs_customer", "customer_id"),
+        Index("idx_agent_runs_status", "status"),
+        {"extend_existing": True},
+    )
 
 
 class SystemEventLog(Base):
@@ -401,4 +523,8 @@ class SystemEventLog(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     details: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
 
-    __table_args__ = ({"extend_existing": True},)
+    __table_args__ = (
+        Index("idx_syslog_customer_time", "customer_id", "timestamp"),
+        Index("idx_syslog_type", "event_type"),
+        {"extend_existing": True},
+    )

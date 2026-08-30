@@ -16,7 +16,7 @@ class InvestigationOutputSchema(BaseModel):
     missing_evidence: List[str] = Field(default_factory=list)
 
 
-SYSTEM_PROMPT = """You are RETAINAI Forensic Customer Success Investigation Agent.
+DEFAULT_SYSTEM_PROMPT = """You are RETAINAI Forensic Customer Success Investigation Agent.
 Your job is to analyze multi-dimensional telemetry (usage events, open support tickets, customer feedback, and admin events) to determine the exact root cause of churn risk.
 
 RULES:
@@ -25,6 +25,13 @@ RULES:
 3. If data sources are sparse (fewer than 2 telemetry categories present), return confidence='INSUFFICIENT_EVIDENCE' and list missing items in missing_evidence.
 4. Keep the root cause concise and actionable (max 2 sentences).
 """
+
+def _resolve_system_prompt() -> str:
+    from retainai.config import settings
+    override = (settings.INVESTIGATION_SYSTEM_PROMPT or "").strip()
+    return override if override else DEFAULT_SYSTEM_PROMPT
+
+SYSTEM_PROMPT = _resolve_system_prompt()
 
 
 class InvestigationAgent:
@@ -41,6 +48,7 @@ class InvestigationAgent:
         support_tickets: List[Dict[str, Any]],
         feedback_entries: List[Dict[str, Any]],
         account_events: List[Dict[str, Any]],
+        system_prompt_override: Optional[str] = None,
     ) -> InvestigationOutputSchema:
         # Collect all evidence IDs
         collected_evidence_ids = []
@@ -115,8 +123,9 @@ class InvestigationAgent:
             "usage_events": usage_events[-5:] if usage_events else [],
         })
 
+        effective_prompt = system_prompt_override or _resolve_system_prompt()
         return await self.client.generate_structured_json(
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=effective_prompt,
             user_prompt=user_prompt,
             response_schema=InvestigationOutputSchema,
             fallback_data=fallback.model_dump(),

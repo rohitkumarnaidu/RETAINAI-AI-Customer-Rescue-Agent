@@ -18,6 +18,38 @@ class CustomerRepository:
         res = await self.db.execute(select(Customer).order_by(Customer.name))
         return list(res.scalars().all())
 
+    async def list_all_paginated(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        risk_level: Optional[str] = None,
+        segment: Optional[str] = None,
+        search: Optional[str] = None,
+        sort_by: str = "name",
+        sort_order: str = "asc",
+    ) -> List[Customer]:
+        # Validate sort fields (S19 deterministic sorting)
+        allowed_sorts = {"name": Customer.name, "health_score": Customer.health_score, "arr": Customer.arr, "risk_level": Customer.risk_level}
+        sort_col = allowed_sorts.get(sort_by, Customer.name)
+        order = sort_col.asc() if sort_order.lower() == "asc" else sort_col.desc()
+        query = select(Customer)
+        if risk_level:
+            # Safe enum comparison via string
+            try:
+                query = query.where(Customer.risk_level == RiskLevel(risk_level))
+            except Exception:
+                pass
+        if segment:
+            query = query.where(Customer.segment == segment)
+        if search:
+            like = f"%{search}%"
+            from sqlalchemy import or_
+
+            query = query.where(or_(Customer.name.ilike(like), Customer.domain.ilike(like), Customer.id.ilike(like)))
+        query = query.order_by(order).limit(limit).offset(offset)
+        res = await self.db.execute(query)
+        return list(res.scalars().all())
+
     async def list_by_risk(self, risk_level: RiskLevel) -> List[Customer]:
         res = await self.db.execute(
             select(Customer).where(Customer.risk_level == risk_level).order_by(Customer.health_score.asc())

@@ -4,7 +4,7 @@ from typing import Dict, Any
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from retainai.db.models import UsageEvent, SupportTicket, CustomerFeedback, AccountEvent, Customer
+from retainai.db.models import UsageEvent, SupportTicket, Customer
 from retainai.services.customer_service import CustomerService
 from retainai.services.event_ingestion_service import EventIngestionService
 from retainai.engine.learning_engine import LearningEngine

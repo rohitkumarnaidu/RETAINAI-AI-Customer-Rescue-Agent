@@ -107,9 +107,9 @@ class TimelineItemSchema(BaseModel):
 
 
 class EventIngestRequest(BaseModel):
-    customer_id: str
-    event_type: str
-    payload: Dict[str, Any]
+    customer_id: str = Field(..., min_length=3, max_length=80, description="Customer ID")
+    event_type: str = Field(..., min_length=3, max_length=50, description="Event type enum")
+    payload: Dict[str, Any] = Field(..., description="Event payload, max 10k chars JSON")
     timestamp: Optional[datetime] = None
 
 

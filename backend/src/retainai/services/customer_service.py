@@ -18,7 +18,7 @@ class CustomerService:
         self.telemetry_repo = TelemetryRepository(db)
         self.risk_repo = RiskRepository(db)
 
-    async def list_customers() -> List[Customer]:
+    async def list_customers(self) -> List[Customer]:
         return await self.customer_repo.list_all()
 
     async def get_customer(self, customer_id: str) -> Optional[Customer]:
@@ -36,9 +36,13 @@ class CustomerService:
 
         total_points = len(usage) + len(tickets) + len(feedback) + len(events)
 
-        signals = SignalEngine.evaluate_all_signals(usage, tickets, feedback, events)
+        signals = SignalEngine.evaluate_all_signals(usage, tickets, feedback, events, customer_id=customer_id)
         health = HealthEngine.compute_health_components(signals)
-        risk_res = RiskEngine.evaluate_risk(health, signals, total_points)
+        # Fetch previous health for delta calculation (risk_change)
+        prev_health = float(customer.health_score) if customer.health_score is not None else None
+        prev_risk = None
+        # risk_change will be computed inside evaluate_risk using previous health
+        risk_res = RiskEngine.evaluate_risk(health, signals, total_points, customer_id=customer_id, previous_health=prev_health, previous_risk_score=prev_risk)
 
         # Update customer state in database
         await self.customer_repo.update_health_and_risk(customer_id, health.overall_health, risk_res.risk_level)

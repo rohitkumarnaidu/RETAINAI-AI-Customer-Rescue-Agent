@@ -33,10 +33,17 @@ class LLMClient:
         fallback_data: Dict[str, Any],
     ) -> T:
         """Generates structured JSON adhering to response_schema, using fallback_data on error."""
-        # 1. Check for mock/dev environment
-        if self.api_key in ("your_llm_api_key_here", "mock_key_for_dev", ""):
-            logger.info("Using deterministic fallback response (mock API key).")
-            return response_schema.model_validate(fallback_data)
+        # 1. Check for mock/dev environment with explicit honesty logging (S33/S96)
+        is_mock = self.api_key in ("your_llm_api_key_here", "mock_key_for_dev", "")
+        if is_mock:
+            logger.info(f"Using deterministic fallback response (mock API key) provider={self.provider} model={self.model}")
+            validated = response_schema.model_validate(fallback_data)
+            # Tag fallback honesty for orchestrator traceability
+            try:
+                validated.__dict__["_fallback_used"] = True  # type: ignore
+            except Exception:
+                pass
+            return validated
 
         # 2. Attempt real LLM API call
         try:
@@ -49,16 +56,18 @@ class LLMClient:
                     "generationConfig": {"responseMimeType": "application/json"},
                 }
 
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
                     resp = await client.post(url, json=payload)
                     if resp.status_code == 200:
                         data = resp.json()
                         text_resp = data["candidates"][0]["content"]["parts"][0]["text"]
                         clean_json = text_resp.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
                         json_dict = json.loads(clean_json)
+                        # DYNAMIC prompt version tagging: capture provider/model used (S95)
+                        logger.info(f"LLM live response provider={self.provider} model={self.model} schema={response_schema.__name__}")
                         return response_schema.model_validate(json_dict)
                     else:
-                        logger.warning(f"LLM API returned HTTP {resp.status_code}. Using fallback.")
+                        logger.warning(f"LLM API returned HTTP {resp.status_code}. Using fallback provider={self.provider} model={self.model}.")
 
         except Exception as e:
             logger.error(f"LLM call failed with exception: {e}. Executing deterministic fallback.")

@@ -1,17 +1,28 @@
 """Closed-loop Learning Engine & Validation Gate."""
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from retainai.db.models import (
     Intervention,
     InterventionOutcome,
     OutcomeStatus,
     ExperienceMemory,
+    LearningCandidate,
     ValidationStatus,
+    Customer,
 )
 from retainai.repositories.intervention_repository import InterventionRepository
 from retainai.repositories.memory_repository import MemoryRepository
+
+logger = logging.getLogger("retainai.learning")
+
+# Validation gate thresholds (S22)
+MIN_EVIDENCE_FOR_VALIDATION = 2  # minimum distinct interventions before promotion
+MIN_CONFIDENCE_FOR_VALIDATION = 0.70
+MIN_SAMPLE_SIZE = 2
 
 
 class LearningEngine:
@@ -31,21 +42,51 @@ class LearningEngine:
         usage_after: float = 0.0,
         customer_response: Optional[str] = None,
         notes: Optional[str] = None,
+        before_metrics: Optional[Dict[str, Any]] = None,
+        after_metrics: Optional[Dict[str, Any]] = None,
+        observations: Optional[List[str]] = None,
+        evidence_ids: Optional[List[str]] = None,
     ) -> InterventionOutcome:
         health_delta = health_after - health_before
 
+        # Use deterministic evaluation thresholds; poor data quality must not become success
+        # If health_before missing or unreliable, confidence drops
+        data_quality_ok = health_before is not None and health_after is not None
+        confidence_base = 0.90 if data_quality_ok else 0.55
+        # Use phrasing that does not claim causality (S27): "associated with improvement"
         if health_delta >= 15.0:
             status = OutcomeStatus.SUCCESS
             eval_status = OutcomeStatus.SUCCESS
+            outcome_label = "SUCCESS"
+            observations = observations or ["usage increased", "support issue resolved", "risk decreased"]
+            confidence = confidence_base
+        elif health_delta >= 5.0:
+            status = OutcomeStatus.NEUTRAL
+            eval_status = OutcomeStatus.NEUTRAL
+            outcome_label = "PARTIAL"
+            observations = observations or ["usage stable", "customer responded"]
+            confidence = 0.65
         elif health_delta >= 0.0:
             status = OutcomeStatus.NEUTRAL
             eval_status = OutcomeStatus.NEUTRAL
+            outcome_label = "PARTIAL"
+            observations = observations or ["no significant change"]
+            confidence = 0.60
         else:
             status = OutcomeStatus.FAILURE
             eval_status = OutcomeStatus.FAILURE
+            outcome_label = "FAILED"
+            observations = observations or ["risk increased", "usage declined"]
+            confidence = 0.85
 
+        # If data quality poor, cap confidence
+        if not data_quality_ok:
+            confidence = min(confidence, 0.60)
+            outcome_label = "UNKNOWN"
+
+        import uuid as _uuid
         outcome = InterventionOutcome(
-            id=f"outc_{intervention_id[:8]}_{int(datetime.now(timezone.utc).timestamp())}",
+            id=f"outc_{intervention_id[:8]}_{_uuid.uuid4().hex[:8]}",
             intervention_id=intervention_id,
             customer_id="",  # Populated from intervention
             health_before=health_before,
@@ -53,56 +94,195 @@ class LearningEngine:
             health_delta=round(health_delta, 1),
             usage_before=usage_before,
             usage_after=usage_after,
+            before_metrics=before_metrics or {"health": health_before, "usage": usage_before},
+            after_metrics=after_metrics or {"health": health_after, "usage": usage_after},
+            observations=observations,
+            evidence_ids=evidence_ids or [],
+            time_window="14d",
             customer_response=customer_response,
             notes=notes,
             status=status,
+            outcome=outcome_label,
             evaluation_status=eval_status,
-            confidence=0.90,
+            confidence=confidence,
         )
 
         intervention = await self.intervention_repo.get_by_id(intervention_id)
         if intervention:
             outcome.customer_id = intervention.customer_id
+            if not outcome.evidence_ids:
+                outcome.evidence_ids = [intervention.id]
             await self.intervention_repo.create_outcome(outcome)
 
-            # Check Validation Gate for Experience Memory Bank
-            if status == OutcomeStatus.SUCCESS:
-                await self._process_learning_candidate(intervention, outcome)
+            # Learning candidate pipeline: always create candidate; validation gate decides promotion
+            await self._create_learning_candidate(intervention, outcome)
 
         return outcome
 
-    async def _process_learning_candidate(
+    async def _create_learning_candidate(
         self, intervention: Intervention, outcome: InterventionOutcome
     ):
-        """Validation Gate: Converts successful interventions into validated Experience Memories."""
-        memory_id = f"mem_val_{intervention.customer_id[:5]}_{int(datetime.now(timezone.utc).timestamp())}"
-        # Fetch segment without triggering lazy-load MissingGreenlet — use explicit query
+        """Create a learning candidate and run validation gate."""
+        candidate_id = f"cand_{intervention.customer_id[:5]}_{int(datetime.now(timezone.utc).timestamp())}_{__import__('uuid').uuid4().hex[:4]}"
         segment = "Enterprise"
         try:
-            from sqlalchemy import select
-            from retainai.db.models import Customer
             cust_res = await self.db.execute(select(Customer.segment).where(Customer.id == intervention.customer_id))
             seg_val = cust_res.scalar_one_or_none()
             if seg_val:
                 segment = seg_val
         except Exception:
             segment = "Enterprise"
+
+        pattern = f"{segment} :: {intervention.action_type}"
+        context_json = {
+            "segment": segment,
+            "action_type": intervention.action_type,
+            "health_before": outcome.health_before,
+            "health_after": outcome.health_after,
+            "health_delta": outcome.health_delta,
+            "intervention_title": intervention.title,
+        }
+        # Calculate confidence with sample awareness
+        # Start low for single observation, increase with repetitions
+        base_conf = 0.68 if outcome.outcome == "SUCCESS" else 0.45
+        # Check existing candidates for same pattern to boost sample_size
+        existing = await self._get_candidates_for_pattern(pattern)
+        sample_size = len(existing) + 1
+        confidence = min(0.95, base_conf + (sample_size -1)*0.12)
+
+        # Handle contradictory outcomes: if recent failures exist, lower confidence
+        recent_failures = sum(1 for c in existing if "FAIL" in str(c.observed_outcome).upper() or c.confidence < 0.6)
+        if recent_failures > 0:
+            confidence = max(0.40, confidence - recent_failures*0.15)
+            logger.info(f"Learning candidate {candidate_id} penalized for {recent_failures} contradictory recent outcomes")
+
+        candidate = LearningCandidate(
+            id=candidate_id,
+            customer_id=intervention.customer_id,
+            intervention_id=intervention.id,
+            pattern=pattern,
+            context_json=context_json,
+            intervention_type=intervention.action_type,
+            observed_outcome=f"Health change {outcome.health_delta:+.1f} points ({outcome.outcome.lower()}) — associated with improvement" if outcome.outcome=="SUCCESS" else f"Health change {outcome.health_delta:+.1f} ({outcome.outcome.lower()})",
+            evidence_ids=[intervention.id, outcome.id] + (outcome.evidence_ids or []),
+            source_intervention_ids=[intervention.id] + [c.intervention_id for c in existing[:3]],
+            sample_size=sample_size,
+            confidence=round(confidence,2),
+            status="PENDING_VALIDATION",
+            validation_status=ValidationStatus.CANDIDATE,
+        )
+        self.db.add(candidate)
+        await self.db.commit()
+        await self.db.refresh(candidate)
+        logger.info(f"Learning candidate created {candidate_id} sample_size={sample_size} confidence={confidence:.2f}")
+
+        # Validation gate: promote only if meets thresholds
+        await self._validation_gate(candidate, pattern, existing)
+
+    async def _get_candidates_for_pattern(self, pattern: str) -> List[LearningCandidate]:
+        res = await self.db.execute(select(LearningCandidate).where(LearningCandidate.pattern == pattern).order_by(LearningCandidate.created_at.desc()).limit(10))
+        return list(res.scalars().all())
+
+    async def _validation_gate(self, candidate: LearningCandidate, pattern: str, existing: List[LearningCandidate]):
+        """Apply safeguards S22 before promoting candidate to validated memory."""
+        # Check minimum sample size
+        if candidate.sample_size < MIN_SAMPLE_SIZE:
+            logger.info(f"Candidate {candidate.id} NOT promoted: sample_size {candidate.sample_size} < {MIN_SAMPLE_SIZE}")
+            return
+        # Confidence check
+        if candidate.confidence < MIN_CONFIDENCE_FOR_VALIDATION:
+            logger.info(f"Candidate {candidate.id} NOT promoted: confidence {candidate.confidence} < {MIN_CONFIDENCE_FOR_VALIDATION}")
+            return
+        # Recency: ensure at least one candidate within last 60 days? For MVP, always pass
+        # Consistency: if >50% of sample were failures, reject
+        # For this candidate set, we already penalized, but need to check existing success rate
+        success_count = sum(1 for c in existing if c.confidence >= 0.65) + (1 if candidate.confidence >= 0.65 else 0)
+        if success_count / candidate.sample_size < 0.6:
+            logger.info(f"Candidate {candidate.id} NOT promoted: success rate {success_count}/{candidate.sample_size} below threshold")
+            candidate.validation_status = ValidationStatus.REJECTED
+            candidate.status = "REJECTED"
+            await self.db.commit()
+            return
+        # Data quality: outcome must be SUCCESS or PARTIAL
+        if candidate.observed_outcome and "failed" in candidate.observed_outcome.lower():
+            candidate.validation_status = ValidationStatus.REJECTED
+            candidate.status = "REJECTED"
+            await self.db.commit()
+            return
+
+        # All checks passed -> promote to validated ExperienceMemory
+        await self._promote_to_memory(candidate, pattern)
+
+    async def _promote_to_memory(self, candidate: LearningCandidate, pattern: str):
+        """Convert validated candidate to ExperienceMemory with structured experience."""
+        # Check for existing memory with same pattern to update instead of duplicate
+        existing_mem = await self.memory_repo.get_by_pattern(pattern)
+        if existing_mem:
+            # Update existing memory: increment success_count, recalc confidence, update provenance
+            existing_mem.success_count += 1
+            existing_mem.sample_size = candidate.sample_size
+            existing_mem.success_rate = round(existing_mem.success_count / existing_mem.sample_size, 2)
+            # Confidence decay / boost logic: increase slightly but cap
+            existing_mem.confidence = min(0.96, existing_mem.confidence + 0.04)
+            existing_mem.last_observed = datetime.now(timezone.utc)
+            existing_mem.evidence_ids = list(set((existing_mem.evidence_ids or []) + candidate.evidence_ids))
+            existing_mem.source_intervention_ids = list(set((existing_mem.source_intervention_ids or []) + candidate.source_intervention_ids))
+            existing_mem.validation_status = ValidationStatus.VALIDATED
+            existing_mem.status = "VALIDATED"
+            await self.db.commit()
+            await self.db.refresh(existing_mem)
+            logger.info(f"Promoted candidate {candidate.id} by updating existing memory {existing_mem.id}")
+            candidate.validation_status = ValidationStatus.VALIDATED
+            candidate.status = "VALIDATED"
+            candidate.validated_at = datetime.now(timezone.utc)
+            await self.db.commit()
+            return
+
+        memory_id = f"mem_val_{candidate.customer_id[:5]}_{int(datetime.now(timezone.utc).timestamp())}"
+        # Fetch segment for memory
+        segment = candidate.context_json.get("segment", "Enterprise")
         memory = ExperienceMemory(
             id=memory_id,
-            context_pattern=f"{segment} Account Recovery — {intervention.action_type}",
+            pattern=pattern,
+            context_pattern=f"{segment} Account Recovery — {candidate.intervention_type}",
             customer_segment=segment,
-            risk_pattern=intervention.action_type or "HIGH_RISK_SUPPORT_BUG_FRICTION",
+            risk_pattern=candidate.intervention_type or "HIGH_RISK_SUPPORT_BUG_FRICTION",
             signals=["UNRESOLVED_CRITICAL_TICKET", "USAGE_DECLINE", "NEGATIVE_FEEDBACK"],
-            recommended_strategy=intervention.action_type,
-            actual_action=intervention.title,
-            observed_outcome=f"Health recovered +{outcome.health_delta:.1f} points after intervention ({outcome.customer_response or 'positive signal'}).",
-            confidence=0.92,
+            recommended_strategy=candidate.intervention_type,
+            recommended_intervention=candidate.intervention_type,
+            actual_action=candidate.context_json.get("intervention_title", candidate.intervention_type),
+            observed_outcome=f"Health recovered {candidate.observed_outcome} (validation sample_size={candidate.sample_size})",
+            confidence=candidate.confidence,
             validation_status=ValidationStatus.VALIDATED,
+            status="VALIDATED",
             success_count=1,
             failure_count=0,
-            evidence_ids=[intervention.id, outcome.id],
+            sample_size=candidate.sample_size,
+            success_rate=1.0,
+            evidence_ids=candidate.evidence_ids,
+            source_intervention_ids=candidate.source_intervention_ids,
+            contexts=[candidate.context_json],
+            last_observed=datetime.now(timezone.utc),
+            version="v2.1",
         )
         await self.memory_repo.add_memory(memory)
+        # Also index in Chroma for semantic retrieval
+        try:
+            from retainai.integrations.chroma_memory import get_chroma_store
+            await get_chroma_store().upsert(memory_id=memory.id, pattern=pattern, segment=segment, text=f"{pattern} {candidate.observed_outcome}", metadata={"confidence": candidate.confidence, "sample_size": candidate.sample_size})
+        except Exception as e:
+            logger.warning(f"Chroma upsert skipped: {e}")
+        candidate.validation_status = ValidationStatus.VALIDATED
+        candidate.status = "VALIDATED"
+        candidate.validated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        logger.info(f"Candidate {candidate.id} promoted to validated memory {memory_id}")
+
+    async def _process_learning_candidate(
+        self, intervention: Intervention, outcome: InterventionOutcome
+    ):
+        """Backward compat shim -> redirect to _create_learning_candidate."""
+        await self._create_learning_candidate(intervention, outcome)
 
     @classmethod
     async def record_outcome(

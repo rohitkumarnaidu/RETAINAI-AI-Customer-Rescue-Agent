@@ -6,7 +6,6 @@ from typing import Dict, Any
 
 from retainai.db.session import get_db
 from retainai.agents.orchestrator import AgentOrchestrator
-from retainai.models.schemas import RiskAssessmentSchema, RetentionPlanSchema
 
 router = APIRouter(prefix="/api/v1/agent", tags=["Agent"])
 

@@ -17,7 +17,7 @@ class RetentionPlanOutputSchema(BaseModel):
     matched_memory_ids: List[str] = Field(default_factory=list)
 
 
-SYSTEM_PROMPT = """You are RETAINAI Action Strategy Agent.
+DEFAULT_SYSTEM_PROMPT = """You are RETAINAI Action Strategy Agent.
 Formulate a personalized, actionable retention intervention plan based on the investigation report and historical Experience Memories.
 
 RULES:
@@ -26,6 +26,13 @@ RULES:
 3. Provide step-by-step execution plan items with owner and target timeline.
 4. Provide a professional, empathetic email draft for the CSM to review.
 """
+
+def _resolve_system_prompt() -> str:
+    from retainai.config import settings
+    override = (settings.ACTION_SYSTEM_PROMPT or "").strip()
+    return override if override else DEFAULT_SYSTEM_PROMPT
+
+SYSTEM_PROMPT = _resolve_system_prompt()
 
 
 class ActionStrategyAgent:
@@ -39,6 +46,7 @@ class ActionStrategyAgent:
         investigation_summary: str,
         root_cause: str,
         matched_memories: List[Dict[str, Any]],
+        system_prompt_override: Optional[str] = None,
     ) -> RetentionPlanOutputSchema:
         memory_ids = [m["id"] for m in matched_memories if "id" in m]
         # Dynamic ticket reference from root cause / investigation summary
@@ -95,8 +103,9 @@ class ActionStrategyAgent:
             "matched_memories": matched_memories,
         })
 
+        effective_prompt = system_prompt_override or _resolve_system_prompt()
         return await self.client.generate_structured_json(
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=effective_prompt,
             user_prompt=user_prompt,
             response_schema=RetentionPlanOutputSchema,
             fallback_data=fallback.model_dump(),
