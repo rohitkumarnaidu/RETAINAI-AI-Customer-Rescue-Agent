@@ -65,8 +65,8 @@ export const ChatWidget: React.FC<{ customerId?:string; customerName?:string }> 
     setConversationId(undefined); setMessages([]); setStreamingText(''); setSpecialists({}); setActiveSpecialists({}); setShowConvs(false);
   };
 
-  const send = async()=>{
-    const q=input.trim(); if(!q||loading) return;
+  const send = async(override?:string)=>{
+    const q=(override ?? input).trim(); if(!q||loading) return;
     setInput(''); setError(null);
     const userMsg: Msg={role:'user', content:q};
     setMessages(prev=>[...prev, userMsg]);

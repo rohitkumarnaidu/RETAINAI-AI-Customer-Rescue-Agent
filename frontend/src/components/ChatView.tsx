@@ -205,7 +205,7 @@ export const ChatView: React.FC<{ onSelectCustomer?:(id:string)=>void }> = ({onS
                   <div className="text-sm font-semibold flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-violet-500"/> Try asking</div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
                     {suggestions.map(s=>(
-                      <button key={s} onClick={()=>setInput(s)} className="text-left text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 hover:bg-slate-50 leading-relaxed">
+                      <button key={s} onClick={()=> send(s)} className="text-left text-xs border border-slate-200 bg-white rounded-lg px-3 py-2.5 hover:bg-slate-50 leading-relaxed active:bg-slate-100 cursor-pointer">
                         {s}
                       </button>
                     ))}
