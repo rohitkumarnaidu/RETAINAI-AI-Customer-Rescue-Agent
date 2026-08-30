@@ -26,6 +26,9 @@ export function App() {
   const [customersImportOpen,setCustomersImportOpen]=useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [hasCustomers, setHasCustomers] = useState<boolean | null>(null);
+  const [hasBypassed, setHasBypassed] = useState<boolean>(() => {
+    try { return localStorage.getItem('retainai_bypass') === '1'; } catch { return false; }
+  });
 
   useEffect(()=>{ const id=setInterval(()=>setNow(new Date()),60000); return ()=>clearInterval(id)},[]);
   useEffect(()=>{
@@ -91,15 +94,30 @@ export function App() {
     {id:'audit', label:'Activity', icon:ScrollText, desc:'Audit trail'},
   ];
 
+  // High-engineer entry: login/signup is the demo start. Show full-screen LoginPage until auth or bypass.
+  if (!isAuthenticated && !hasBypassed) {
+    return (
+      <LoginPage
+        initialMode="signup"
+        onSuccess={() => {
+          setHasBypassed(false);
+          setToast('Authenticated — tenant ' + (tenantId || ''));
+          setTimeout(() => setToast(null), 2000);
+          window.location.reload();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8F7F5] text-slate-900 font-sans selection:bg-slate-900 selection:text-white">
       <div className="bg-[#0F172A] text-slate-300 text-[11px] font-mono tracking-wide">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 h-7 flex items-center justify-between gap-4">
           <span className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Demo environment · Synthetic customer data · 101 accounts · SENSE → THINK → ACT → MEASURE → LEARN
+            Demo environment · High engineers · Top models (Groq · OpenAI · Gemini) · SENSE → THINK → ACT → MEASURE → LEARN
           </span>
-          <span className="hidden md:inline text-slate-400">Updated {now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · Monitoring active</span>
+          <span className="hidden md:inline text-slate-400">Updated {now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · End-to-end · tenant {tenantId || '—'}</span>
         </div>
       </div>
 
@@ -134,7 +152,7 @@ export function App() {
               <Upload className="w-3.5 h-3.5" /> Import
             </button>
             {isAuthenticated && user ? (
-              <button onClick={logout} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50">
+              <button onClick={() => { try { localStorage.removeItem('retainai_bypass'); } catch {}; logout(); window.location.reload(); }} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-50">
                 <LogOut className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Logout</span>
               </button>
             ) : (
