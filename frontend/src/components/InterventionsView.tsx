@@ -146,11 +146,11 @@ export const InterventionsView: React.FC = ()=>{
                     <button onClick={()=> setOutcomeFor(outcomeFor===iv.id?null:iv.id)} className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border ${outcomeFor===iv.id ? 'bg-slate-900 text-white border-slate-900' : 'bg-white hover:bg-slate-50'}`}><BarChart3 className="w-3.5 h-3.5"/> {outcomeFor===iv.id ? 'Cancel' : 'Record Outcome (MEASURE)'}</button>
                     {outcomeFor===iv.id && (
                       <div className="mt-2 bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div><label className="text-xs font-medium">Health after *</label><input type="number" min={0} max={100} value={healthAfter} onChange={e=>setHealthAfter(e.target.value)} placeholder="78" className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"/></div>
                           <div><label className="text-xs font-medium">Usage after</label><input type="number" value={usageAfter} onChange={e=>setUsageAfter(e.target.value)} placeholder="auto" className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"/></div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div><label className="text-xs font-medium">Response</label><select value={response} onChange={e=>setResponse(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white"><option>POSITIVE</option><option>NEUTRAL</option><option>NEGATIVE</option></select></div>
                           <div><label className="text-xs font-medium">Notes</label><input value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Optional" className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"/></div>
                         </div>

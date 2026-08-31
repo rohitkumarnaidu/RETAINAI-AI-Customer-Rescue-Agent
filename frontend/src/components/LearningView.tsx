@@ -194,12 +194,12 @@ export const LearningView: React.FC = ()=>{
             </div>
           </div>
           <Card>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h3 className="text-xs font-bold tracking-wide text-slate-500">VECTOR MEMORY · CHROMA · 100% AGENT</h3>
-              <span className="text-[11px] font-mono bg-slate-900 text-white px-2 py-0.5 rounded-full">tenant_{typeof window !== 'undefined' ? (localStorage.getItem('retainai_tenant_id')||'demo').slice(0,8) : 'demo'}_memories</span>
+              <span className="text-[11px] font-mono bg-slate-900 text-white px-2 py-0.5 rounded-full shrink-0 self-start sm:self-auto whitespace-nowrap">tenant_{typeof window !== 'undefined' ? (localStorage.getItem('retainai_tenant_id')||'demo').slice(0,8) : 'demo'}_memories</span>
             </div>
-            <div className="grid grid-cols-3 gap-3 mt-3 text-xs">
-              <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 text-center"><div className="font-mono text-[11px] text-slate-500">COLLECTION</div><div className="font-bold mt-1">tenant_*.memories</div><div className="text-[11px] text-slate-500">isolated per tenant</div></div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 text-xs">
+              <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 text-center"><div className="font-mono text-[11px] text-slate-500">COLLECTION</div><div className="font-bold mt-1 truncate" title="tenant_*.memories">tenant_*.memories</div><div className="text-[11px] text-slate-500">isolated per tenant</div></div>
               <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-3 text-center"><div className="font-mono text-[11px] text-emerald-700">EMBED</div><div className="font-bold mt-1">8-dim hash</div><div className="text-[11px] text-slate-500">fallback in-mem</div></div>
               <div className="border border-blue-200 bg-blue-50 rounded-lg p-3 text-center"><div className="font-mono text-[11px] text-blue-700">QUERY</div><div className="font-bold mt-1">ranked</div><div className="text-[11px] text-slate-500">overlap+conf</div></div>
             </div>

@@ -47,7 +47,7 @@ export const EvidenceDrawer: React.FC<{ids:string[]; open:boolean; onClose:()=>v
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-white border-l border-slate-200 h-full overflow-auto p-6 shadow-xl">
+      <div className="relative w-[92vw] sm:max-w-md max-w-md bg-white border-l border-slate-200 h-full overflow-auto p-4 sm:p-6 shadow-xl">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold">Evidence references</h3>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg">✕</button>

@@ -186,7 +186,7 @@ export const ChatWidget: React.FC<{ customerId?:string; customerName?:string }> 
         {open ? <X className="w-6 h-6"/> : <><MessageCircle className="w-6 h-6"/><span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white animate-pulse"/></>}
       </button>
       {open && (
-        <div className="fixed bottom-20 right-5 z-50 w-[92vw] sm:w-[420px] h-[68vh] sm:h-[560px] bg-white border border-slate-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed bottom-20 right-5 z-50 w-[92vw] sm:w-[420px] h-[68vh] sm:h-[560px] max-h-[calc(100vh-100px)] bg-white border border-slate-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
           {/* Header */}
           <div className="bg-[#0F172A] text-white px-4 py-3 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2.5 min-w-0">

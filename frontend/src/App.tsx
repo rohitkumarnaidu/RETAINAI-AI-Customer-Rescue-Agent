@@ -161,7 +161,7 @@ export function App() {
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/90 border-b border-slate-200">
         <div className="max-w-[1440px] mx-auto px-3 sm:px-6 h-[56px] flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <button onClick={()=>setMobileNavOpen(v=>!v)} className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-slate-100 shrink-0" aria-label="Toggle navigation">
+            <button onClick={()=>setMobileNavOpen(v=>!v)} className="lg:hidden p-2.5 -ml-2 rounded-lg hover:bg-slate-100 shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Toggle navigation">
               {mobileNavOpen ? <X className="w-5 h-5"/> : <Menu className="w-5 h-5"/>}
             </button>
             <div className="w-8 h-8 rounded-lg bg-[#0F172A] flex items-center justify-center shrink-0">

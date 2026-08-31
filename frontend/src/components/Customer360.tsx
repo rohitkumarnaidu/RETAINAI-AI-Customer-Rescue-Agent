@@ -174,9 +174,9 @@ export const Customer360: React.FC<{customerId:string; onNavigate?: (tab: TabNav
   return (
     <div className="space-y-5">
       {/* Breadcrumb — clickable Customers navigates to Customers list */}
-      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
-        <button onClick={()=> onNavigate?.('customers')} className="hover:text-slate-900 hover:underline underline-offset-2 cursor-pointer" title="Go to Customers list">Customers</button> <ChevronRight className="w-3 h-3"/> <span className="text-slate-700 font-medium">{customer.name}</span> <span className="text-slate-400">· 360</span>
-        {onNavigate && <button onClick={()=> onNavigate?.('customers')} className="ml-2 text-[11px] border border-slate-200 bg-white px-2 py-0.5 rounded-full hover:bg-slate-50 hidden sm:inline-flex items-center gap-1">← Back to list</button>}
+      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono min-w-0 overflow-hidden">
+        <button onClick={()=> onNavigate?.('customers')} className="hover:text-slate-900 hover:underline underline-offset-2 cursor-pointer shrink-0" title="Go to Customers list">Customers</button> <ChevronRight className="w-3 h-3 shrink-0"/> <span className="text-slate-700 font-medium truncate min-w-0 flex-1" title={customer.name}>{customer.name}</span> <span className="text-slate-400 shrink-0">· 360</span>
+        {onNavigate && <button onClick={()=> onNavigate?.('customers')} className="ml-2 text-[11px] border border-slate-200 bg-white px-2 py-0.5 rounded-full hover:bg-slate-50 hidden sm:inline-flex items-center gap-1 shrink-0">← Back to list</button>}
       </div>
 
       {/* Stepper — clickable: each step navigates to its section (SENSE→ inject, THINK/ACT→ investigation, MEASURE→ outcome, LEARN→ memory) */}
@@ -265,15 +265,15 @@ export const Customer360: React.FC<{customerId:string; onNavigate?: (tab: TabNav
       </div>
 
       <Card>
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center"><Upload className="w-4 h-4"/></div>
-            <div>
-              <div className="text-sm font-semibold">Upload Telemetry CSV for {customer.name}</div>
-              <div className="text-xs text-slate-500">Any dataset shape — orders, visits, tickets, reviews. Extra columns preserved as metadata & visible in timeline.</div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0"><Upload className="w-4 h-4"/></div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold truncate" title={`Upload Telemetry CSV for ${customer.name}`}>Upload Telemetry CSV for {customer.name}</div>
+              <div className="text-xs text-slate-500 leading-relaxed">Any dataset shape — orders, visits, tickets, reviews. Extra columns preserved as metadata & visible in timeline.</div>
             </div>
           </div>
-          <button onClick={async()=>{ const [riskData, tl, sigs]=await Promise.all([getCustomerRisk(customerId).catch(()=>null), getCustomerTimeline(customerId,60).catch(()=>[]), getCustomerSignals(customerId).catch(()=>[])]); setRisk(riskData); setTimeline(tl); setSignals(Array.isArray(sigs)?sigs:[]); setSuccess('Refreshed — timeline & signals updated'); setTimeout(()=>setSuccess(null),2000);}} className="text-xs border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1"><Database className="w-3 h-3"/> Refresh 360</button>
+          <button onClick={async()=>{ const [riskData, tl, sigs]=await Promise.all([getCustomerRisk(customerId).catch(()=>null), getCustomerTimeline(customerId,60).catch(()=>[]), getCustomerSignals(customerId).catch(()=>[])]); setRisk(riskData); setTimeline(tl); setSignals(Array.isArray(sigs)?sigs:[]); setSuccess('Refreshed — timeline & signals updated'); setTimeout(()=>setSuccess(null),2000);}} className="text-xs border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg hover:bg-slate-50 inline-flex items-center gap-1 shrink-0 self-start sm:self-center whitespace-nowrap"><Database className="w-3 h-3"/> Refresh 360</button>
         </div>
         <TelemetryUpload customerId={customerId} defaultEventType="AUTO" onSuccess={async()=>{
           const [riskData, tl, sigs]=await Promise.all([getCustomerRisk(customerId).catch(()=>null), getCustomerTimeline(customerId,60).catch(()=>[]), getCustomerSignals(customerId).catch(()=>[])]);
@@ -305,10 +305,10 @@ export const Customer360: React.FC<{customerId:string; onNavigate?: (tab: TabNav
               </div>
             )}
             {risk?.health_components && (
-              <div className="grid grid-cols-4 gap-2 mt-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
                 {Object.entries(healthComps).map(([k,v]:any)=>(
                   <div key={k} className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
-                    <div className="text-[11px] font-mono text-slate-500 uppercase">{k}</div>
+                    <div className="text-[11px] font-mono text-slate-500 uppercase truncate" title={k}>{k}</div>
                     <div className={`text-lg font-semibold ${Number(v)<50?'text-red-600': Number(v)<75?'text-amber-600':'text-teal-700'}`}>{Math.round(Number(v))}</div>
                   </div>
                 ))}
@@ -454,7 +454,7 @@ export const Customer360: React.FC<{customerId:string; onNavigate?: (tab: TabNav
                     <p className="text-xs text-slate-500 mt-1">After intervention, measure health delta. In production this is 14d; demo allows immediate recording. <b>Success = Δ≥15 → Validated memory (LEARN)</b></p>
                     {showOutcomeForm && (
                       <form onSubmit={handleRecordOutcome} className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div><label className="text-xs font-medium">Health before</label><input value={String(risk?.health_score ?? customer.health_score ?? 70)} readOnly className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-slate-100"/><div className="text-[11px] text-slate-500">Current health</div></div>
                           <div><label className="text-xs font-medium">Health after *</label><input type="number" min={0} max={100} required value={healthAfter} onChange={e=>setHealthAfter(e.target.value)} placeholder="e.g. 78" className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"/><div className="text-[11px] text-slate-500">0-100 after intervention</div></div>
                           <div><label className="text-xs font-medium">Usage after</label><input type="number" min={0} max={100} value={usageAfter} onChange={e=>setUsageAfter(e.target.value)} placeholder="auto = health after" className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"/></div>
@@ -493,10 +493,10 @@ export const Customer360: React.FC<{customerId:string; onNavigate?: (tab: TabNav
                 ))}
               </div>
               {result.health_dimensions && (
-                <div className="mt-2 grid grid-cols-4 gap-1.5">
+                <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {Object.entries(result.health_dimensions as any).map(([k,v]:any)=>(
                     <div key={k} className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-center">
-                      <div className="text-[10px] font-mono text-slate-500 uppercase">{k}</div>
+                      <div className="text-[10px] font-mono text-slate-500 uppercase truncate" title={k}>{k}</div>
                       <div className="text-sm font-semibold">{Math.round(Number(v))}</div>
                     </div>
                   ))}

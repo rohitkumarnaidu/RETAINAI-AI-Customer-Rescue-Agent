@@ -102,10 +102,10 @@ export const InvestigationsView: React.FC<{onSelectCustomer:(id:string)=>void}> 
                 </div>
                 {detail ? (
                   <div className="mt-4 space-y-3">
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5"><div className="text-[11px] text-slate-500">State</div><div className="font-medium">{detail.current_state}</div></div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5"><div className="text-[11px] text-slate-500">State</div><div className="font-medium truncate" title={detail.current_state}>{detail.current_state}</div></div>
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5"><div className="text-[11px] text-slate-500">Steps</div><div className="font-medium">{detail.total_steps}</div></div>
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5"><div className="text-[11px] text-slate-500">Model</div><div className="font-medium">{detail.model} {detail.model_version}</div></div>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5"><div className="text-[11px] text-slate-500">Model</div><div className="font-medium truncate" title={`${detail.model} ${detail.model_version}`}>{detail.model} {detail.model_version}</div></div>
                     </div>
                     <div>
                       <div className="text-xs font-semibold">State history</div>

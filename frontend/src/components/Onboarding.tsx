@@ -101,11 +101,11 @@ export const Onboarding: React.FC<{ onComplete?: () => void }> = ({ onComplete }
             </React.Fragment>
           ))}
         </div>
-        <div className="flex gap-2 mt-3">
+        <div className="flex flex-wrap gap-2 mt-3">
           {[1, 2, 3, 4].map(n => (
-            <button key={n} onClick={() => setStep(n as Step)} className={`text-xs px-2.5 py-1 rounded-full border ${step === n ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>Step {n}</button>
+            <button key={n} onClick={() => setStep(n as Step)} className={`text-xs px-2.5 py-1 rounded-full border whitespace-nowrap shrink-0 ${step === n ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>Step {n}</button>
           ))}
-          {onComplete && step === 4 && <button onClick={onComplete} className="ml-auto text-xs bg-emerald-600 text-white px-3 py-1 rounded-full hover:bg-emerald-700">Go to Command Center →</button>}
+          {onComplete && step === 4 && <button onClick={onComplete} className="ml-auto text-xs bg-emerald-600 text-white px-3 py-1 rounded-full hover:bg-emerald-700 whitespace-nowrap shrink-0">Go to Command Center →</button>}
         </div>
       </div>
 
@@ -255,10 +255,10 @@ export const Onboarding: React.FC<{ onComplete?: () => void }> = ({ onComplete }
                 <div className="font-semibold text-amber-900">You can skip this — investigate with just customers.</div>
                 <div className="text-amber-800 mt-1">For richest signal, bulk-upload historical telemetry via CSV (any shape) below, or via API: <code className="bg-white px-1 rounded">POST /telemetry/upload</code> or <code className="bg-white px-1 rounded">POST /customers/{"{id}"}/events/bulk</code>. Or use Customer 360 → Inject Live Data after.</div>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">USAGE_EVENT</div><div className="text-slate-500 mt-1 font-mono">{"{"}daily_active_users, license_utilization{"}"}</div></div>
-                <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">SUPPORT_TICKET</div><div className="text-slate-500 mt-1 font-mono">{"{"}severity, subject, description{"}"}</div></div>
-                <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">CUSTOMER_FEEDBACK</div><div className="text-slate-500 mt-1 font-mono">{"{"}sentiment, text, score{"}"}</div></div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">USAGE_EVENT</div><div className="text-slate-500 mt-1 font-mono break-words">{"{"}daily_active_users, license_utilization{"}"}</div></div>
+                <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">SUPPORT_TICKET</div><div className="text-slate-500 mt-1 font-mono break-words">{"{"}severity, subject, description{"}"}</div></div>
+                <div className="border border-slate-200 rounded-lg p-2.5 text-center"><div className="font-semibold">CUSTOMER_FEEDBACK</div><div className="text-slate-500 mt-1 font-mono break-words">{"{"}sentiment, text, score{"}"}</div></div>
               </div>
               <details><summary className="text-xs font-mono text-slate-600 cursor-pointer">Example bulk payload</summary><pre className="text-xs bg-slate-950 text-slate-200 rounded p-2 mt-1 overflow-auto">{`{
   "events": [

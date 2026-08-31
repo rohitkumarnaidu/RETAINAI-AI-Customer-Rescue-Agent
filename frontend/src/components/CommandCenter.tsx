@@ -61,17 +61,17 @@ export const CommandCenter: React.FC<{onSelectCustomer:(id:string)=>void}> = ({o
           <p className="text-sm text-slate-600 mt-1">
             {critical.length} critical · {watch.length} watch · {healthy.length} healthy · {(atRiskARR/1000).toFixed(0)}k ARR at risk · {customers.length} total accounts
           </p>
-          <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5"><FileSpreadsheet className="w-3 h-3" /> Have your own data? Go to <b>Customers</b> → <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium"><Upload className="w-3 h-3" /> Import CSV / Add customer</span> — now supports live data, not just demo 101.</p>
+          <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-1.5"><FileSpreadsheet className="w-3 h-3 shrink-0" /> Have your own data? Go to <b>Customers</b> → <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium whitespace-nowrap"><Upload className="w-3 h-3 shrink-0" /> Import CSV / Add customer</span> — now supports live data, not just demo 101.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {hero ? (
-            <button onClick={()=> hero && onSelectCustomer(hero.id)} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800">
-              Open highest risk 360 <ArrowUpRight className="w-4 h-4" />
+            <button onClick={()=> hero && onSelectCustomer(hero.id)} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 whitespace-nowrap shrink-0">
+              Open highest risk 360 <ArrowUpRight className="w-4 h-4 shrink-0" />
             </button>
           ) : (
             <span className="inline-flex items-center gap-2 bg-slate-100 text-slate-500 px-4 py-2 rounded-lg text-sm font-medium border border-dashed border-slate-300">— No hero</span>
           )}
-          <button onClick={load} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 rounded-lg text-sm hover:bg-slate-50"><Clock className="w-4 h-4 text-slate-500"/>Refresh</button>
+          <button onClick={load} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 rounded-lg text-sm hover:bg-slate-50 whitespace-nowrap shrink-0"><Clock className="w-4 h-4 text-slate-500 shrink-0"/>Refresh</button>
         </div>
       </div>
 

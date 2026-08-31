@@ -119,10 +119,10 @@ export const SettingsView: React.FC = () => {
             </div>
           ))}
         </div>
-        <div className="mt-3 flex items-center gap-2 text-xs">
-          <span className={`px-2.5 py-1 rounded-full border font-mono ${sumOk ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>Σ = {sumWeights.toFixed(2)} {sumOk ? '✓ ok' : '→ normalize'}</span>
-          <button onClick={normalize} className="border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50">Normalize to 1.0</button>
-          <span className="text-slate-500">Default {JSON.stringify(DEFAULT_WEIGHTS)}</span>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className={`px-2.5 py-1 rounded-full border font-mono shrink-0 ${sumOk ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>Σ = {sumWeights.toFixed(2)} {sumOk ? '✓ ok' : '→ normalize'}</span>
+          <button onClick={normalize} className="border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50 shrink-0">Normalize to 1.0</button>
+          <span className="text-slate-500 break-words">Default {JSON.stringify(DEFAULT_WEIGHTS)}</span>
         </div>
       </Card>
 
@@ -187,9 +187,9 @@ export const SettingsView: React.FC = () => {
         </div>
       </Card>
 
-      <div className="flex items-center gap-2">
-        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"><Save className="w-4 h-4" />{saving ? 'Saving…' : 'Save org settings'}</button>
-        <button onClick={load} className="border border-slate-200 bg-white px-4 py-2.5 rounded-lg text-xs hover:bg-slate-50">Discard</button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 shrink-0"><Save className="w-4 h-4 shrink-0" />{saving ? 'Saving…' : 'Save org settings'}</button>
+        <button onClick={load} className="border border-slate-200 bg-white px-4 py-2.5 rounded-lg text-xs hover:bg-slate-50 shrink-0">Discard</button>
         {!sumOk && <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">Weights must sum ≈1.0 to save correctly</span>}
       </div>
     </div>

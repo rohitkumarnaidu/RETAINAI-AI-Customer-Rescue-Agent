@@ -276,10 +276,10 @@ export const DataHubView: React.FC<{ onSelectCustomer?: (id: string) => void }> 
           </div>
         )}
 
-        <div className="flex min-h-[420px] max-h-[720px]">
+        <div className="flex flex-col sm:flex-row min-h-[420px] max-h-[720px]">
           {/* Left — Folder Tree */}
           {!folderCollapsed && (
-            <div className="w-full sm:w-[300px] shrink-0 border-r border-slate-200 bg-[#FAFAF9] flex flex-col">
+            <div className="w-full sm:w-[300px] shrink-0 border-r-0 sm:border-r border-b sm:border-b-0 border-slate-200 bg-[#FAFAF9] flex flex-col">
               <div className="p-3 border-b border-slate-200 bg-white/60 backdrop-blur">
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-mono text-slate-500 tracking-wide flex items-center gap-1.5"><HardDrive className="w-3.5 h-3.5" /> TENANT FILES</div>

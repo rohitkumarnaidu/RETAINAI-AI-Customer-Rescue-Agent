@@ -169,15 +169,15 @@ export const LoginPage: React.FC<{ onSuccess?: () => void; initialMode?: 'login'
             </button>
           </form>
 
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50">
-              <div className="font-semibold flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-emerald-600" /> Login</div>
-              <div className="text-slate-600 mt-1">For existing `demo-tenant-001` → `101` customers, instant investigate.</div>
+              <div className="font-semibold flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" /> Login</div>
+              <div className="text-slate-600 mt-1 leading-relaxed">For existing `demo-tenant-001` → `101` customers, instant investigate.</div>
               <button onClick={() => { setMode('login'); setEmail('admin@retainai.io'); setPassword('demo123'); }} className="mt-2 text-xs border border-slate-200 bg-white px-2 py-1 rounded-lg hover:bg-slate-50 w-full">Use demo admin</button>
             </div>
             <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50">
-              <div className="font-semibold flex items-center gap-1"><Sparkles className="w-3 h-3 text-violet-600" /> Sign up</div>
-              <div className="text-slate-600 mt-1">New `tenant_xxx` → `0` customers → Onboarding → first investigate.</div>
+              <div className="font-semibold flex items-center gap-1"><Sparkles className="w-3 h-3 text-violet-600 shrink-0" /> Sign up</div>
+              <div className="text-slate-600 mt-1 leading-relaxed">New `tenant_xxx` → `0` customers → Onboarding → first investigate.</div>
               <button onClick={() => { setMode('signup'); setEmail(`user${Math.floor(Math.random()*999)}@acme.com`); }} className="mt-2 text-xs border border-slate-200 bg-white px-2 py-1 rounded-lg hover:bg-slate-50 w-full">Try fresh email</button>
             </div>
           </div>
