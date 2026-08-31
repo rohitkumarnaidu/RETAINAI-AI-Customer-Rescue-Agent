@@ -80,3 +80,10 @@ session-*.md
 # transcript exports (raw session copies — not for commit, keeps repo clean for submission)
 transcript/
 
+# Vendored toolchain / deployment caches (not for commit — 50MB+ binaries)
+_uv/
+backend/_uv/
+.vercel/
+backend/.vercel/
+.chroma/
+
