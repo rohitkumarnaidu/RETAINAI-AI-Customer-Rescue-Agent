@@ -49,8 +49,12 @@ from retainai.db.session import get_db
 # -- Config (env overridable)
 def _resolve_secret() -> str:
     # Prefer JWT_SECRET, fallback to AUTH_SECRET, then settings
-    val = os.getenv("JWT_SECRET") or os.getenv("AUTH_SECRET") or getattr(settings, "JWT_SECRET", "") or getattr(settings, "AUTH_SECRET", "retainai-dev-secret-change-in-prod")
-    return val
+    val = os.getenv("JWT_SECRET") or os.getenv("AUTH_SECRET") or getattr(settings, "JWT_SECRET", "") or getattr(settings, "AUTH_SECRET", "")
+    is_production = os.getenv("APP_ENV", "").lower() == "production" or getattr(settings, "APP_ENV", "").lower() == "production"
+    if is_production:
+        if not val or val == "retainai-dev-secret-change-in-prod":
+            raise RuntimeError("FATAL (Zero Trust): JWT_SECRET or AUTH_SECRET must be explicitly configured in production environment.")
+    return val or "retainai-dev-secret-change-in-prod"
 
 AUTH_SECRET = _resolve_secret()
 JWT_SECRET = os.getenv("JWT_SECRET") or getattr(settings, "JWT_SECRET", AUTH_SECRET) or AUTH_SECRET
@@ -184,7 +188,11 @@ async def get_current_user(
     # Resolve demo bypass tenant: header > JWT tid > DEMO_TENANT_ID
     demo_tenant = x_tenant_id or DEMO_TENANT_ID
 
-    if not AUTH_ENABLED and settings.DEMO_MODE:
+    is_production = os.getenv("APP_ENV", "").lower() == "production" or getattr(settings, "APP_ENV", "").lower() == "production"
+    if is_production and not (credentials and credentials.credentials) and not x_api_key:
+        raise HTTPException(status_code=401, detail="Authentication required in production (Zero Trust)")
+
+    if not AUTH_ENABLED and settings.DEMO_MODE and not is_production:
         # Demo bypass: return synthetic admin but still extract customer scope if header present
         # Try to parse JWT if provided even in demo mode to honor tenant
         if credentials and credentials.credentials and jwt is not None:
@@ -386,7 +394,10 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
         raise
     except Exception:
         pass
-    # Fallback to demo users
+    # Fallback to demo users (non-production only)
+    is_production = os.getenv("APP_ENV", "").lower() == "production" or getattr(settings, "APP_ENV", "").lower() == "production"
+    if is_production:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
     user = _DEMO_USERS.get(email)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -407,4 +418,3 @@ async def me(user: Dict[str, Any] = Depends(get_current_user)):
 async def verify_scope(customer_id: str, user: Dict[str, Any] = Depends(get_current_user)):
     _authorize_customer_scope(user, customer_id)
     return {"customer_id": customer_id, "allowed": True, "user": user["email"]}
-
